@@ -8,10 +8,16 @@
 #include "helpers.h"
 #include "json.hpp"
 
+// blazado: project inlcude files
+#include <thread>
+#include "localization.h"
+#include "ticker.h"
+
 // for convenience
 using nlohmann::json;
 using std::string;
 using std::vector;
+
 
 int main() {
   uWS::Hub h;
@@ -49,9 +55,22 @@ int main() {
     map_waypoints_dx.push_back(d_x);
     map_waypoints_dy.push_back(d_y);
   }
+  
+  // blazado: module initizalization
+  Ticker::Instance().secs_per_tick(0.2);
+  Localization localization(map_waypoints_s, map_waypoints_x, map_waypoints_y,
+      Ticker::Instance().secs_per_tick());
+  //Behavior behavior(localization);
+  //Trajectory trajectory(localization, behavior);
+  
+  localization.Run();
+  //behavior.Run();
+  //trajectory.Run();
+  
+  //https://stackoverflow.com/questions/5395309/how-do-i-force-cmake-to-include-pthread-option-during-compilation
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy]
+               &map_waypoints_dx,&map_waypoints_dy,&localization]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -97,7 +116,23 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
-
+           
+          localization.Update(car_x, car_y, car_s, car_d, 
+              car_yaw, car_speed);
+          
+          //trajectory.GetXYVals(next_x_vals, next_y_vals);
+          
+          
+          double curr_x = car_x;
+          double curr_y = car_y;
+          std::cout << "adding points" << std::endl;
+          for (int i=0; i < 50; i ++) {
+            curr_x += 5*(cos(deg2rad(car_yaw))) * 0.02;
+            curr_y += 5*(sin(deg2rad(car_yaw))) * 0.02;
+            
+            next_x_vals.push_back(curr_x);
+            next_y_vals.push_back(curr_y);
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
@@ -132,5 +167,9 @@ int main() {
     return -1;
   }
   
+  std::cout << "about to run" << std::endl;
+  
   h.run();
+  
+  std::cout << "ended" << std::endl;
 }
