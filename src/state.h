@@ -6,15 +6,13 @@
 class State {
   
   public:
-    State();
-    ~State();
-    static void  SetCurrSD(FrenetKinematics& curr_sd);
+    static void  frenet(FrenetKinematics& frenet);
     int          Cost();
     virtual void Plan()=0;
-    void         GetXYVals(vector<double>& x_vals, vector<double>& y_vals);
+    //void         GetXYVals(vector<double>& x_vals, vector<double>& y_vals);
     
   protected:
-    static     FrenetKinematics curr_sd;
+    static FrenetKinematic frenet_;
     static int lane_;
     Trajectory traj_;
     
@@ -25,7 +23,6 @@ class State {
     static         vector<CostFunction> cost_functions_;
     static int     SpeedCost(State& state);
     static int     CollisionCost(State& state);
-    
 };
 
 class KeepLane : public State {

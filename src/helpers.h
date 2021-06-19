@@ -21,7 +21,7 @@ string hasData(string s);
 //
 
 // For converting back and forth between radians and degrees.
-constexpr double pi();
+constexpr double pi() { return M_PI; }
 double deg2rad(double x);
 double rad2deg(double x);
 
@@ -52,5 +52,7 @@ typedef std::chrono::time_point<system_clock> time_point;
 
 time_point GetTimePoint();
 double DiffTimePoint(time_point tp_f, time_point tp_i); // in seconds
+
+void test(void* p);
 
 #endif  // HELPERS_H

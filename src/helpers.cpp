@@ -29,7 +29,6 @@ string hasData(string s) {
 //
 
 // For converting back and forth between radians and degrees.
-constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
@@ -108,7 +107,7 @@ vector<double> getFrenet(double x, double y, double theta,
   double center_x = 1000-maps_x[prev_wp];
   double center_y = 2000-maps_y[prev_wp];
   double centerToPos = distance(center_x,center_y,x_x,x_y);
-  double centerToRef = distance(center_x,center_y,proj_x,proj_y);
+  double centerToRef = distance(center_x,center_y,proj_x,proj_y); 
 
   if (centerToPos <= centerToRef) {
     frenet_d *= -1;
@@ -172,3 +171,4 @@ double DiffTimePoint(time_point t2, time_point t1) {
   
   return double (diff_int.count()) / 1000.0;
 }
+

@@ -1,13 +1,20 @@
 #include <state.h>
 
-vector<CostFunction> State::cost_functions_(
+vector<CostFunction> State::cost_functions_{
     State::SpeedCost, 
-    State::CollisionCost);
+    State::CollisionCost};
     
+State::frenet(FrenetKinematic& frenet) {
+  
+  frenet_ = frenet;
+  
+  return;
+}
+
     
 int State::Cost() {
   
-  GenerateTrajectory();
+  Plan();
   
   int cost = 0;
   for (i=0; i <= cost_fuctions_.size(); i ++)
@@ -17,18 +24,13 @@ int State::Cost() {
 }
 
   
-void State::TransitionFrom(State& old_state) {
-  
-  curr_sd_ = old_state.curr_sd_;
-  
-  return;
-}
-
 
 int State::SpeedCost(State &state) {
   
+  using std::ceil;
+  
   double final_v = state.traj_.end().s.v;
-  double delta_v = State::speed_limit_ - final_v;
+  double delta_v = 45 - final_v // State::speed_limit_ - final_v;
   
   int cost = ceil(delta_v);
   
@@ -66,9 +68,9 @@ void KeepLane::KeepLane(){
   
 }
 
-void State::SetCurrSD(Kinematic s, Kinematic d) {
+void State::frenet(FrenetKinematic& frenet) {
   
-  curr_sd_ = sd;
+  frenet_ = frenet;
   
   return;
 }
@@ -81,12 +83,26 @@ void State::GetXYVals(vector<double>& x_vals, vector<double>& y_vals) {
 }
   
 
+int DToLane (double d) {
+  
+  int lane = std::round ((d - 2.0) / 4.0)
+  
+  return (lane > 0) ? lane : 1;
+}
+
+double LaneToD (int lane) {
+  
+  double d = 4.0*lane + 2.0;
+  
+  return d;
+}
+
 void KeepLane::Plan () {
   
   double max_acc = 10.0;   // 10 m/sec2
   
   double lane_v  = 45;  // GetMaxLaneSpeed();
-  double delta_v = lane_v - curr_sd_.v;
+  double delta_v = lane_v - frenet_.s.v;
   double t = delta_v / max_acc;
   if (t < 0) {
     // decelerate
@@ -96,15 +112,16 @@ void KeepLane::Plan () {
   
   FrenetKinematic end;
   
-  end.s.p = curr_sd_.s.p + curr_sd_.s.v*t + 0.5*max_acc*t*t;
+  end.s.p = frenet_.s.p + frenet_.s.v*t + 0.5*max_acc*t*t;
   end.s.v = lane_v;
   end.s.a = 0;
   
-  end.d.p = LaneToD(lane_);
+  lane = DToLane(frenet_.d.p)
+  end.d.p = LaneToD(lane);
   end.d.v = 0;
   end.d.a = 0;
   
-  traj_.Generate(curr_, end, t);
+  traj_.Generate(frenet_, end, t);
   
   return;
 }

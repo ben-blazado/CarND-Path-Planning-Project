@@ -34,6 +34,12 @@ typedef struct {
 } CartP;
 
 typedef struct {
+  double s;
+  double d;
+} FrenetP;
+
+
+typedef struct {
   double x;
   double y;
 } CartV;
@@ -53,16 +59,41 @@ typedef struct {
   time_point tp;
 } LocalizationData;
 
+
+class Origin {
+  public:
+    Origin (double origin_x, double origin_y, double rotation);   
+  
+    void Transform (CartP& p);
+    void Restore (CartP& p);
+    
+    void Transform(double& angle);
+    void Restore(double& angle);
+  
+  private:
+    double x_;
+    double y_;
+    double rotation_;
+};
+    
+
+enum Direction {
+    kRight,
+    kStraight,
+    kLeft
+};
+
 class Localization {
   public:
   
     Localization(vector<double>& maps_s, vector<double>& maps_x, 
-        vector<double>& maps_y, double secs_per_update);
+        vector<double>& maps_y, vector<double>maps_dx, vector<double> maps_dy, 
+        double secs_per_tick);
         
     ~Localization();
 
-    vector<double> CalcXY (double s, double d);
-    vector<double> CalcFrenet (double x, double y, double theta);
+    CartP   CalcXY(FrenetP frenet_p);
+    FrenetP CalcFrenet(CartP cart_p);
     
     FrenetKinematic frenet();
     
@@ -70,7 +101,8 @@ class Localization {
         double car_yaw, double car_speed);
         
     void Run();
-
+    
+    void Test();
     
   private:
   
@@ -82,10 +114,28 @@ class Localization {
     vector<double> maps_s_;
     vector<double> maps_x_;
     vector<double> maps_y_;
+    vector<double> maps_dx_;
+    vector<double> maps_dy_;
+    vector<double> maps_s_theta_;
     
-    LocalizationData localization_data_;
+    int num_map_points_;
+    
+    vector<Origin>    origin_;
+    vector<Direction> direction_;
+    vector<CartP>     end_point_;
+    vector<double>    end_theta_;
+    vector<double>    yaw_rate_;
+    vector<double>    arc_vel_;
+    vector<double>    vel_;
+    
+    static constexpr double kMaxSVal_ = 6946.0;   // per project readme.md
+    
+    int GetStartPoint(double s);
+    int GetStartPoint(CartP p);
+    
+    LocalizationData   localization_data_;
     CartesianKinematic cart_;
-    FrenetKinematic frenet_;
+    FrenetKinematic    frenet_;
     
     double secs_per_tick_;
     

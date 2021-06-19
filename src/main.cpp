@@ -58,12 +58,17 @@ int main() {
   
   // blazado: module initizalization
   Ticker::Instance().secs_per_tick(0.2);
+  // Behavior behavior;
   Localization localization(map_waypoints_s, map_waypoints_x, map_waypoints_y,
-      Ticker::Instance().secs_per_tick());
+    map_waypoints_dx, map_waypoints_dy, Ticker::Instance().secs_per_tick());
+  std::cout<<"run"<<std::endl;    
+
+    
   //Behavior behavior(localization);
   //Trajectory trajectory(localization, behavior);
   
   localization.Run();
+  localization.Test();
   //behavior.Run();
   //trajectory.Run();
   

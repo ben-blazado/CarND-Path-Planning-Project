@@ -1,21 +1,32 @@
 #ifndefine BEHAVIOR_H
 #define BEHAVIOR_H
 
-#include <localization.h>
+#include "state.h"
 
 class Behavior {
   
   public:
-    Behavior(Localization& localization);
-    void Plan(vector<double>& xvals, vector<double>& yvals);
+    Behavior(Trajectory& trajectory, 
+        int max_lanes, double speed_limit, double max_acc);
+    
+    void Run();
       
   private:
     SelectBestState();
     
-    vector<State> states_;
-    int           i_curr_state_;
+    Trajectory trajectory_;
     
-    Localization& localization;
+    int max_lanes_;
+    int max_secs_;
+    
+    vector<double> speed_options_(3);
+    enum class SpeedOption {
+      kStop,
+      kMaintain,
+      kMaxLane
+    };
+    
+    vector<State> states_;
 };
 
 
