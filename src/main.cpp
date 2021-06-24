@@ -126,8 +126,21 @@ int main() {
               car_yaw, car_speed);
           
           //trajectory.GetXYVals(next_x_vals, next_y_vals);
+
+          FrenetP frenet = localization.CalcSD({car_x, car_y});
           
+          double curr_s = frenet.s;
+          double curr_d = 6;
+          double vel = 13.4112;  // m/s
+          for (int i = 0; i < 10; i ++) {
+            curr_s += vel * i * 0.02;
+            // curr_s = fmod (curr_s, Localization::kMaxSVal_);
+            CartP p = localization.CalcXY({curr_s, curr_d});
+            next_x_vals.push_back(p.x);
+            next_y_vals.push_back(p.y);
+          } 
           
+          /*
           double curr_x = car_x;
           double curr_y = car_y;
           std::cout << "adding points" << std::endl;
@@ -138,6 +151,7 @@ int main() {
             next_x_vals.push_back(curr_x);
             next_y_vals.push_back(curr_y);
           }
+          */
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;

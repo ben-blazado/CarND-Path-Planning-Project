@@ -6,9 +6,11 @@
 #include <mutex>
 
 #include "helpers.h"
+#include "spline.h"
 
 using std::vector;
 using std::mutex;
+using std::thread;
 
 // PVA - position, velocity, acceleration
 typedef struct {
@@ -21,12 +23,17 @@ typedef struct {
 typedef struct {
   Kinematic s;
   Kinematic d;
-} FrenetKinematic;
+} FrenetK;
 
 typedef struct {
   Kinematic x;
   Kinematic y;
-} CartesianKinematic;
+} CartK;
+
+typedef struct {
+  double s;
+  double d;
+} FrenetP;
 
 typedef struct {
   double x;
@@ -34,20 +41,14 @@ typedef struct {
 } CartP;
 
 typedef struct {
-  double s;
-  double d;
-} FrenetP;
-
-
-typedef struct {
   double x;
   double y;
 } CartV;
 
 typedef struct {
-  double s;
-  double d;
-} FrenetSeparation;
+  double delta_s;
+  double delta_d;
+} FrenetDiff;
 
 typedef struct {
   double car_x;
@@ -77,11 +78,23 @@ class Origin {
 };
     
 
-enum Direction {
-    kRight,
-    kStraight,
-    kLeft
+class spline2 : public tk::spline {
+  
+  
+  public:
+    spline2() : spline() {
+      ;
+    }
+    
+    spline2(const std::vector<double>& X, const std::vector<double>& Y) :
+        tk::spline(X, Y) {
+      ;
+    }
+        
+    vector<double> where_deriv_zero();
+    vector<double> closest_x(double x, double y);
 };
+
 
 class Localization {
   public:
@@ -91,11 +104,13 @@ class Localization {
         double secs_per_tick);
         
     ~Localization();
+    
+    static constexpr double kMaxSVal_ = 6946.0;   // per project readme.md
 
     CartP   CalcXY(FrenetP frenet_p);
-    FrenetP CalcFrenet(CartP cart_p);
+    FrenetP CalcSD(CartP cart_p);
     
-    FrenetKinematic frenet();
+    FrenetK frenet();
     
     void Update (double car_x, double car_y, double car_s, double car_d,
         double car_yaw, double car_speed);
@@ -106,11 +121,6 @@ class Localization {
     
   private:
   
-    std::thread thread_;
-    bool thread_alive_;
-    std::mutex mutex_;
-    bool updated_;
-    
     vector<double> maps_s_;
     vector<double> maps_x_;
     vector<double> maps_y_;
@@ -120,22 +130,23 @@ class Localization {
     
     int num_map_points_;
     
-    vector<Origin>    origin_;
-    vector<Direction> direction_;
-    vector<CartP>     end_point_;
-    vector<double>    end_theta_;
-    vector<double>    yaw_rate_;
-    vector<double>    arc_vel_;
-    vector<double>    vel_;
-    
-    static constexpr double kMaxSVal_ = 6946.0;   // per project readme.md
+    spline2 spline_sx_;
+    spline2 spline_sy_;
+    spline2 spline_sdx_;
+    spline2 spline_sdy_;
+    spline2 spline_y_;
     
     int GetStartPoint(double s);
     int GetStartPoint(CartP p);
     
-    LocalizationData   localization_data_;
-    CartesianKinematic cart_;
-    FrenetKinematic    frenet_;
+    thread thread_;
+    bool   thread_alive_;
+    mutex  mutex_;
+    bool   updated_;
+    
+    LocalizationData localization_data_;
+    CartK            cart_;
+    FrenetK          frenet_;
     
     double secs_per_tick_;
     

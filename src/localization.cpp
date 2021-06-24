@@ -51,16 +51,11 @@ void Origin::Restore(CartP& p) {
   double sin_rot = sin(-rotation_);
   double cos_rot = cos(-rotation_);
   
-  cout << "rotation " << rotation_ << endl;
-  
   double x = p.x;
   double y = p.y;
   
   p.x = x*cos_rot - y*sin_rot;
   p.y = x*sin_rot + y*cos_rot;
-  
-  cout << "px " << p.x << endl;
-  cout << "py " << p.y << endl;
   
   // unshift point relative to new origin
   p.x += x_;
@@ -83,7 +78,48 @@ void Origin::Restore(double& angle) {
   angle -= rotation_;
   
   return;
+  
 }
+
+
+vector<double> quad_root(double a, double b, double c) {
+  
+  vector<double> root = {};
+  
+  double discriminant = b*b - 4*a*c;
+  
+  if (discriminant >= 0) {
+  
+    root.push_back ((-b + sqrt(discriminant)) / (2*a));
+    root.push_back ((-b - sqrt(discriminant)) / (2*a));
+  }
+  
+  return root;
+}
+  
+
+vector<double> spline2::where_deriv_zero() {
+  
+  vector<double> x_where_deriv_zero;
+  
+  for (size_t i=0; i < m_x.size() - 1; i ++) {
+    
+    double a = 3*m_d[i];
+    double b = 2*m_c[i];
+    double c =   m_b[i];
+    
+    vector<double> root = quad_root(a, b, c);
+    if (root.size() > 0)
+      for (int r=0; r < 2; r ++) {
+        double x_root = m_x[i] + root[r];
+        if ((m_x[i] <= x_root) and (x_root < m_x[i+1]))
+          x_where_deriv_zero.push_back(x_root);
+      }
+  }
+  
+  return x_where_deriv_zero;
+}
+
 
 
 Localization::Localization(vector<double>& maps_s, vector<double>& maps_x, 
@@ -98,74 +134,12 @@ Localization::Localization(vector<double>& maps_s, vector<double>& maps_x,
   
   num_map_points_ = maps_s_.size();
   
-  cout << std::fixed << std::setprecision(12);
+  spline_sx_ = spline2(maps_s_, maps_x_);
+  spline_sy_ = spline2(maps_s_, maps_y_);
+  spline_sdx_ = spline2(maps_s_, maps_dx_);
+  spline_sdy_ = spline2(maps_s_, maps_dy_);
   
-  cout << "initializing loc mappoints " << num_map_points_ << endl; 
-  for (int i = 0; i < num_map_points_; i ++) {
-    
-    int j = (i + 1) % num_map_points_;
-    
-    // origin_
-    // generate local origins at each s position
-    double start_normal = atan2(maps_dy_[i], maps_dx_[i]);
-    double start_theta  = start_normal + pi()/2.0;
-    Origin origin(maps_x[i], maps_y[i], -start_theta);
-    origin_.push_back(origin);
-    
-    // direction_
-    double end_normal = atan2(maps_dy_[j], maps_dx_[j]);
-    double end_theta =  end_normal + pi()/2.0;   
-    origin.Transform(end_theta);
-    end_theta = fmod(end_theta, 2*pi());
-    if (fabs(end_theta) > pi()) {
-      cout << "end theta " << rad2deg(end_theta) << endl;
-      if (end_theta > 0)
-        end_theta = 2.0*pi() - end_theta;
-      else
-        end_theta = 2.0*pi() + end_theta;
-      cout << "end theta " << rad2deg(end_theta) << endl;
-    }
-    Direction direction;
-    if (0 > end_theta) 
-      direction = kRight;
-    else if (0 == end_theta) 
-      direction = kStraight;
-    else  // end_theta < 0
-      direction = kLeft;
-    direction_.push_back(direction);
-      
-    // end_theta_
-    if (direction == kRight)
-      end_theta *= -1.0;
-    end_theta_.push_back(end_theta);
-    
-    //end_point_
-    CartP end_point = {maps_x[j], maps_y[j]};
-    origin.Transform(end_point);
-    if (direction == kRight)
-      end_point.y *= -1;
-    end_point_.push_back(end_point);
-    
-    // yaw_rate_
-    double s_ij;
-    if (j == 0)   // implies that i == num_map_points_ - 1 (last map point)
-      s_ij = kMaxSVal_ - maps_s_[i];
-    else
-      s_ij = maps_s_[j] - maps_s_[i];
-    double yaw_rate = end_theta / s_ij;
-    yaw_rate_.push_back(yaw_rate);
-
-    // arc_vel_ (euclidean distance per degree)
-    double dist_ij = distance (0, 0, end_point.x, end_point.y);
-    double degs_ij = end_theta;
-    double arc_vel = dist_ij / degs_ij;
-    arc_vel_.push_back(arc_vel);
-
-    // vel_ (euclidean distance per frenet s distance)
-    double vel = dist_ij / s_ij;
-    vel_.push_back(vel);
-    
-  }
+  // spline_x_ = spline2(maps_x_, maps_y_);
   
   cart_.x.v   = 0;
   cart_.y.v   = 0;
@@ -189,14 +163,9 @@ int Localization::GetStartPoint(double s) {
   
   // use a linear search of maps_s since its pretty small
   // start search from last element and go backward
-  
-  cout << "Get Start Point " << endl;
-  cout << "s " << s << endl;
   int i = num_map_points_ - 1;
   while (maps_s_[i] > s and i > 0) 
     i --;
-  
-  cout << "closest i " << i << endl;
   
   return i;
 }
@@ -215,33 +184,28 @@ int Localization::GetStartPoint(CartP p) {
     }
   }
   
-  cout << "closest i " << closest << endl;
-  
   // use closest map point to find starting point of map segment
   // that contains p
   // set p as local origin rotated by bearing from p to closest point
   CartP closest_p = {maps_x_[closest], maps_y_[closest]};
   double bearing = atan2(closest_p.y - p.y, closest_p.x - p.x);
-  cout << "bearing to closest point (deg) " << rad2deg(bearing) << endl;
   Origin origin(p.x, p.y, -bearing);    // closest_p is now in front of p  
   
   // find next_p to closest and transform to local origin p
   int next = (closest + 1) % num_map_points_;
-  cout << "next point to try " << next << endl;
   CartP next_p = {maps_x_[next], maps_y_[next]};
   origin.Transform(next_p);
   
   int start;
   // check if the segment [closest, next_p] contains p
   if (next_p.x > 0) {
-    cout << "next point is in front of p" << endl;
-    // the segment [closest, next_p] does not contain p
+    // the segment [closest, next_p] can not contain p
     // select prev to closest as start point
     // https://stackoverflow.com/a/33664449
     start = (num_map_points_ + closest - 1) % num_map_points_;
   }
   else
-    // the segment [closest, next_p] contains p
+    // the segment [closest, next_p] must contain p
     // select closest point as start point
     start = closest;
   
@@ -249,133 +213,81 @@ int Localization::GetStartPoint(CartP p) {
 }
 
  
-CartP Localization::CalcXY(FrenetP frenet_p) {
+CartP Localization::CalcXY(FrenetP f) {
   
-  cout << "----- CalcXY ----- " << endl;
-
-  CartP cart_p;
+  CartP p;
   
-  int i = GetStartPoint(frenet_p.s);
-  cout << "start point i " << i << endl;  
+  p.x = spline_sx_(f.s) + f.d*spline_sdx_(f.s);
+  p.y = spline_sy_(f.s) + f.d*spline_sdy_(f.s);
   
-  switch (direction_[i]) {
-    case kRight:
-    case kLeft: {
-      
-      // calculate theta_f
-      double s_f = frenet_p.s - maps_s_[i];
-      double theta_f = yaw_rate_[i] * s_f;
-      
-      cout << "theta_f " << theta_f << endl;
-      
-      double sin_theta_f = sin(theta_f);
-      double cos_theta_f = cos(theta_f);
-      
-      cout << "D" << distance(0, 0, end_point_[i].x, end_point_[i].y) << endl;
-      cout << "end theta " << end_theta_[i] << endl;
-      cout << "alpha (arcvel) " << arc_vel_[i] << endl;
-      // find x,y on ref line based on theta_f
-      double x_ref = arc_vel_[i] * sin_theta_f;
-      double y_ref = arc_vel_[i] * (1 - cos_theta_f);
-      
-      cout << "x_ref " << x_ref << endl;
-      cout << "y_ref " << y_ref << endl;
-      
-      // find x,y from ref line based on theta_f and d
-      switch (direction_[i]) {
-        case kRight:
-          cout << "right" << endl;
-          cart_p.x = x_ref - frenet_p.d * sin_theta_f;
-          cart_p.y = (-1) * (y_ref + frenet_p.d * cos_theta_f);
-          cout << "cart_p.x before transform " << cart_p.x << endl;
-          cout << "cart_p.y before transform " << cart_p.y << endl;
-          break;
-        case kLeft:
-          cout << "left" << endl;
-          cart_p.x = x_ref + frenet_p.d * sin_theta_f;
-          cart_p.y = y_ref - frenet_p.d * cos_theta_f;
-          break;
-      }
-      break;
-    }
-    case kStraight:
-      cout << "straight" << endl;
-      cart_p.x = (frenet_p.s - maps_s_[i]) * vel_[i];
-      cart_p.y = -frenet_p.d;
-      break;
-  }
-  
-  origin_[i].Restore(cart_p);
-  cout << "cart p x " << cart_p.x << endl;
-  cout << "cart p y " << cart_p.y << endl;
-  
-  return cart_p;
+  return p;
 }
 
     
-FrenetP Localization::CalcFrenet(CartP cart_p) {
+FrenetP Localization::CalcSD(CartP p) {
   
-  cout << "----- CalcFrenet ----- " << endl;
+  FrenetP f;
   
-  FrenetP frenet_p;
+  int start_point = GetStartPoint(p);
   
-  int i = GetStartPoint(cart_p);
+  double s = maps_s_[start_point];
   
-  cout << "start point i " << i << endl;
-  cout << "cart p x " << cart_p.x << endl;
-  cout << "cart p y " << cart_p.y << endl;
+  double precision = 0.000000001;
+  double delta = std::numeric_limits<double>::infinity();
   
-  origin_[i].Transform(cart_p);
-  
-  switch (direction_[i]) {
+  int i = 0;
+  while (abs(delta) > precision) {
+
+    double xs = p.x - spline_sx_(s);
+    double ys = p.y - spline_sy_(s);
+
+    double sx_p  = spline_sx_.deriv(1, s);
+    double sy_p  = spline_sy_.deriv(1, s);
     
-    case kRight:
-      cart_p.y *= -1;
-    case kLeft: {
-  
-      cout << "cart p x after trans " << cart_p.x << endl;
-      cout << "cart p y after trans " << cart_p.y << endl;
-      cout << "alpha (arcvel) " << arc_vel_[i] << endl;
-      double theta_f = atan2(cart_p.x, arc_vel_[i] - cart_p.y);
-      double sin_theta_f = sin(theta_f);
-      double cos_theta_f = cos(theta_f);
-      
-      cout << "xp - Cx " << cart_p.x << endl;
-      cout << "arc_vel_[i] - cart_p.y " << arc_vel_[i] - cart_p.y << endl;
-      cout << "theta_f " << theta_f << endl;
-      
-      // find x,y on s-reference line based on theta_f
-      double x_ref = arc_vel_[i] * sin_theta_f;
-      double y_ref = arc_vel_[i] * (1 - cos_theta_f);
-      
-      cout << "x_ref " << x_ref << endl;
-      cout << "y_ref " << y_ref << endl;
-      
-      frenet_p.s = maps_s_[i] + theta_f / yaw_rate_[i];
-      
-      switch (direction_[i]) {
-        case kRight : frenet_p.d = (x_ref - cart_p.x) / sin_theta_f; break;
-        case kLeft  : frenet_p.d = (cart_p.x - x_ref) / sin_theta_f; break;
-      }
-      
+    double sx_pp = spline_sx_.deriv(2, s);
+    double sy_pp = spline_sy_.deriv(2, s);
+    
+    double D_sqr_p  = (-2) * (xs*sx_p + ys*sy_p);
+    double D_sqr_pp = (-2) * (xs*sx_pp - sx_p*sx_p + ys*sy_pp - sy_p*sy_p);
+    
+    //double D = distance (p.x, p.y, spline_sx_(s), spline_sy_(s));    
+    //double D_sqr_p = 2*(xs)*(-sx_p) + 2*(ys)*(-sy_p);
+    //double D_p = (1/(2*D)) * (D_sqr_p);
+    //double D_neg_sqrt_prime = -0.5 * D_p / sqrt(D*D*D);
+    //double D_sqr_pp = 2*(xs*(-sx_pp)+sx_p*sx_p) + 2*(ys*(-sy_pp)+ sy_p*sy_p);
+    //double D_pp = 0.5*(sqrt(D) * D_sqr_pp + D_neg_sqrt_prime * D_sqr_p);
+    //double m = (0.5*D_sqr_p/D);
+    //double m_p = 0.5*(D_sqr_pp / sqrt(D) + D_neg_sqrt_prime*D_sqr_p);
+    //double m_p = 2*(D*D_pp + D_p*D_p);
+    //double m = 2*D*D_p;
+    
+    delta = D_sqr_p/D_sqr_pp;
+    
+    s = s - delta;
+    
+    cout << "s  " << s << endl;    
+    cout << "delta  " << delta << endl;    
+    cout << "----" << endl;    
+    
+    i ++;
+    if (i > 10) {
+      cout << "s did not converge." << endl;
       break;
     }
-    case kStraight: 
     
-      frenet_p.d = -cart_p.y;
-      frenet_p.s = maps_s_[i] + cart_p.x/vel_[i];
-      
-      break;
   }
   
-  return frenet_p;
+  f.s = s;
+  f.d = distance (p.x, p.y, spline_sx_(s), spline_sy_(s));
+ 
+  return f;
 }
 
 
-FrenetKinematic Localization::frenet() {
+FrenetK Localization::frenet() {
   
   unique_lock<mutex> u_lock(mutex_, defer_lock);
-  FrenetKinematic frenet;
+  FrenetK frenet;
   
   u_lock.lock();
   frenet = frenet_;
@@ -406,18 +318,19 @@ void Localization::Run () {
   
   thread_alive_ = true;
   
-  thread_ = std::thread( [this] {
+  thread_ = thread( [this] {
     
     unique_lock<mutex> u_lock(mutex_, defer_lock);
     
     while (thread_alive_) {
       
-      if (u_lock.try_lock()) {
+      if (u_lock.try_lock()) { 
         if (updated_) {
           
           // calculate seconds since last update
           static time_point prev_tp = localization_data_.tp;
           double secs = DiffTimePoint(localization_data_.tp, prev_tp);
+          cout << "diff time update " << secs << endl;
           
           double theta = deg2rad(localization_data_.car_yaw);  // car yaw in radians
           
@@ -435,10 +348,10 @@ void Localization::Run () {
           // update kinetics in frenet system
           // calculate next sd position from next xy position
           // use next sd position to calculate velocity and acc in frenet system
-          double next_x = cart_.x.p + cart_.x.v*secs;
-          double next_y = cart_.y.p + cart_.y.v*secs;
-          CartP next_p = {next_x, next_y};
-          FrenetP next_sd = CalcFrenet(next_p);
+          double  next_x = cart_.x.p + cart_.x.v*secs;
+          double  next_y = cart_.y.p + cart_.y.v*secs;
+          CartP   next_p = {next_x, next_y};
+          FrenetP next_sd = CalcSD(next_p);
           
           double prev_s_v = frenet_.s.v;
           frenet_.s.p = localization_data_.car_s;
@@ -464,9 +377,138 @@ void Localization::Run () {
   return;
 }
 
+
 void Localization::Test() {
   
+  /*-------------------  */
 
+  
+  cout << "test " << endl;
+  
+  CartP p = {950, 1130};
+  vector<double> sd = getFrenet(p.x, p.y, 0, maps_x_, maps_y_);
+  
+  cout << "sd " << sd[0] << " " << sd[1] << endl;
+  
+  double lowest_d = std::numeric_limits<double>::infinity();
+  int closest;
+  
+  // find closest map point by distance
+  for (int i = 0; i < num_map_points_; i ++) {
+    double d = distance(p.x, p.y, maps_x_[i], maps_y_[i]);
+    if (d < lowest_d) {
+      lowest_d = d;
+      closest = i;
+    }
+  }
+  
+  cout << "closest i " << closest << endl;
+  cout << "closest s " << maps_s_[closest] << endl;
+
+  double precision = 0.000001;
+  double delta = std::numeric_limits<double>::infinity();
+  
+  double s = (maps_s_[closest] + maps_s_[closest - 1]) / 2;
+  int i = 0;
+  while (abs(delta) > precision) {
+
+    double xs = p.x - spline_sx_(s);
+    double ys = p.y - spline_sy_(s);
+
+    double sx_p  = spline_sx_.deriv(1, s);
+    double sy_p  = spline_sy_.deriv(1, s);
+    
+    double sx_pp = spline_sx_.deriv(2, s);
+    double sy_pp = spline_sy_.deriv(2, s);
+
+    double D = distance (p.x, p.y, spline_sx_(s), spline_sy_(s));
+
+    //double D_sqr_p = 2*(xs)*(-sx_p) + 2*(ys)*(-sy_p);
+    double D_sqr_p = (-2) * (xs*sx_p + ys*sy_p);
+    
+    double D_p = (1/(2*D)) * (D_sqr_p);
+    
+    double D_neg_sqrt_prime = -0.5 * D_p / sqrt(D*D*D);
+    
+    //double D_sqr_pp = 2*(xs*(-sx_pp)+sx_p*sx_p) + 2*(ys*(-sy_pp)+ sy_p*sy_p);
+    double D_sqr_pp = -2 * (xs*sx_pp - sx_p*sx_p + ys*sy_pp - sy_p*sy_p);
+    
+    double D_pp = 0.5*(sqrt(D) * D_sqr_pp + D_neg_sqrt_prime * D_sqr_p);
+    
+    double m = (0.5*D_sqr_p/D);
+    
+    double m_p = 0.5*(D_sqr_pp / sqrt(D) + D_neg_sqrt_prime*D_sqr_p);
+    // double m_p = 2*(D*D_pp + D_p*D_p);
+    // double m = 2*D*D_p;
+    
+    delta = D_sqr_p/D_sqr_pp;
+    
+    s = s - delta;
+    
+
+    cout << "s  " << s << endl;    
+    cout << "m_prime  " << m_p << endl;    
+    cout << "delta  " << delta << endl;    
+    cout << "Distance   " << D << endl;    
+    cout << "----" << D << endl;    
+    
+    i ++;
+    //if (i > 10)
+    //      break;
+    
+  }
+  
+  
+  double d = distance (p.x, p.y, spline_sx_(s), spline_sy_(s));
+  cout << "point x y " << p.x << " " << p.y << endl;
+  cout << "best s " << s << endl;
+  cout << "best x, y " << spline_sx_(s) << " " << spline_sy_(s) << endl;
+  cout << "distance " << d << endl;
+  cout << "iter i " << i << endl;
+  
+  double check_x = spline_sx_(s) + d * spline_sdx_(s);
+  double check_y = spline_sy_(s) + d * spline_sdy_(s);
+  cout << "check " << check_x << " " << check_y;
+  
+  FrenetP f = CalcSD(p);
+  
+  cout << "frenet s " << f.s << endl;
+  cout << "frenet d " << f.d << endl;
+  
+  CartP check = CalcXY(f);
+  
+  cout << "cart x " << check.x << endl;
+  cout << "cart y " << check.y << endl;
+  
+
+
+  /*-------------------*/
+  
+  
+  /*-------------------
+  vector<double> sx_deriv_zero = spline_sx_.where_deriv_zero();
+  vector<double> sy_deriv_zero = spline_sy_.where_deriv_zero();
+  
+  for (int i = 0; i < sx_deriv_zero.size(); i ++)
+    cout << "s where deriv wrt x is 0 " << sx_deriv_zero[i] << endl;
+  
+  for (int i = 0; i <sx_deriv_zero.size(); i ++)
+    cout << "s where deriv wrt y is 0 " << sy_deriv_zero[i] << endl;
+  
+  vector<double> s_deriv_zero;
+  
+  s_deriv_zero.insert(s_deriv_zero.end(), sx_deriv_zero.begin(), sx_deriv_zero.end());
+  s_deriv_zero.insert(s_deriv_zero.end(), sy_deriv_zero.begin(), sy_deriv_zero.end());
+  
+  sort(s_deriv_zero.begin(), s_deriv_zero.end());
+  
+
+  for (int i = 0; i <s_deriv_zero.size(); i ++)
+    cout << "s where deriv is 0 " << s_deriv_zero[i] << endl;
+  
+  ---------------------*/
+  
+  
   /*
   int i = 84;
   int j = (i + 1) % num_map_points_;
@@ -496,7 +538,7 @@ void Localization::Test() {
   
   */
 
-  /**/
+  /*
 
   double err = 0.0;
   
@@ -520,6 +562,7 @@ void Localization::Test() {
       else
         d = 0.3*l;
       
+      cout << "s d [" << i << "] " << s << ", " << d << endl;
       CartP xy = CalcXY({s, d});
       FrenetP sp_prime = CalcFrenet(xy);
       
@@ -530,7 +573,7 @@ void Localization::Test() {
   }
   
   cout << "------------ total err " << err << endl;
-  /**/
+  */
     
   
 }
