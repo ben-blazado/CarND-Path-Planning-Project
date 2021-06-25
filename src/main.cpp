@@ -60,7 +60,7 @@ int main() {
   Ticker::Instance().secs_per_tick(0.2);
   // Behavior behavior;
   Localization localization(map_waypoints_s, map_waypoints_x, map_waypoints_y,
-    map_waypoints_dx, map_waypoints_dy, Ticker::Instance().secs_per_tick());
+    map_waypoints_dx, map_waypoints_dy, 6945.554, Ticker::Instance().secs_per_tick());
   std::cout<<"run"<<std::endl;    
 
     
@@ -137,112 +137,39 @@ int main() {
           
           //trajectory.GetXYVals(next_x_vals, next_y_vals);
           
-          double curr_s;
-          double curr_d;
+          FrenetP f;
           int path_remaining =  previous_path_x.size();
           double acc = 4.4704;  // m/s2
-          // std::cout << "*** car vel mps  " << vel << std::endl;
-          //std::cout << "*** car speed mph " << car_speed << std::endl;
-          //vel = (car_speed / 2.237);
           
           if (path_remaining > 0) {
-            //curr_s = end_path_s;
-            //curr_d = end_path_d;
+            
             double end_x = previous_path_x.back();
             double end_y = previous_path_y.back();
+            f = localization.CalcSD ({end_x, end_y});
             
-            FrenetP end_f = localization.CalcSD ({end_x, end_y});
-            
-            curr_s = end_s;
-            curr_d = end_d;
-
-            std::cout << "Start XY " << end_x << " " << end_y << std::endl;
-            std::cout << "Start SD " << curr_s << " " << curr_d << std::endl;
-            
-            for (int i = 0; i < previous_path_x.size(); i ++) {
-              next_x_vals.push_back(previous_path_x[i]);
-              next_y_vals.push_back(previous_path_y[i]);
-            }
+            next_x_vals.insert(next_x_vals.end(), 
+                previous_path_x.begin(), previous_path_x.end());
+            next_y_vals.insert(next_y_vals.end(), 
+                previous_path_y.begin(), previous_path_y.end());
+                
           }
-          else {
-            FrenetP f = localization.CalcSD({car_x, car_y});          
-            curr_s = f.s;
-            curr_d = f.d;
-            vector<double> sd;
-            sd = getFrenet(car_x, car_y, car_yaw, map_waypoints_x, map_waypoints_y);
-            std::cout << "********** No path remaining " << curr_s << " " << curr_d << std::endl;      
-            std::cout << "********** No path remaining " << car_s << " " << car_d << std::endl;      
-            std::cout << "********** No path remaining " << sd[0] << " " << sd[1] << std::endl;    
-
-            std::cout << "********** " << std::endl;    
-            std::cout << "********** No path remaining " << car_x << " " << car_y << std::endl;                
-            CartP p = localization.CalcXY({curr_s, curr_d});
-            std::cout << "********** No path remaining " << p.x << " " << p.y << std::endl;    
-            p = localization.CalcXY({car_s, car_d});
-            std::cout << "********** No path remaining " << p.x << " " << p.y << std::endl;    
-            vector<double>xy = getXY(sd[0], sd[1], map_waypoints_s, map_waypoints_x, map_waypoints_y);
-            std::cout << "********** No path remaining " << xy[0] << " " << xy[1] << std::endl;    
-            //exit(1);
-            
-          }
-          std::cout << " before FOR  curr_s " << curr_s << " " << curr_d << std::endl;
-          //curr_d = 6.0;
+          else 
+            f = localization.CalcSD({car_x, car_y});          
+          
           for (int i = 0; i < 50 - path_remaining; i ++) {
-            std::cout << "vel " << vel << std::endl;
-            if (vel < 21) {     // (49 / 2.237))
-              std::cout << "increasing vel " << vel << std::endl;
+            
+            if (vel < 21)      // (49 / 2.237))
               vel += acc * 0.02;
-            }
-            curr_s += vel * 0.02;
-            //curr_d = 6.0;
-            std::cout << "   curr_s " << curr_s << " " << curr_d << std::endl;
-            // curr_s = fmod (curr_s, Localization::kMaxSVal_);
-            CartP p = localization.CalcXY({curr_s, curr_d});
-            /*
-            if (next_x_vals.size() > 0) {
-              old_x = next_x_vals.back();
-              old_y = next_y_vals.back();
-              double dist = distance(p.x, p.y, old_x, old_y);
-              std::cout << "dist to prev " << dist << std::endl;
-              std::cout << "adding point " << p.x << " " << p.y << std::endl;
-              if (dist > 50)
-                std::cout << "******  added far away point ******" << p.x << " " << p.y << std::endl << std::flush;;
-                // exit(0);
-            }
-            */
+            f.s += vel * 0.02;
+            CartP p = localization.CalcXY(f);
+            
             next_x_vals.push_back(p.x);
             next_y_vals.push_back(p.y);
           } 
-          /*
-          double curr_x = car_x;
-          double curr_y = car_y;
-          std::cout << "adding points" << std::endl;
-          for (int i=0; i < 50; i ++) {
-            curr_x += 5*(cos(deg2rad(car_yaw))) * 0.02;
-            curr_y += 5*(sin(deg2rad(car_yaw))) * 0.02;
-            
-            next_x_vals.push_back(curr_x);
-            next_y_vals.push_back(curr_y);
-          }
-          */
-          
-          end_s = curr_s;
-          end_d = curr_d;
-          
-          {
-            double end_x = next_x_vals.back();
-            double end_y = next_y_vals.back();
-        
-            FrenetP end_f = localization.CalcSD ({end_x, end_y});
-          
-            std::cout << "End XY " << end_x << " " << end_y << std::endl;
-            std::cout << "End SD " << end_f.s << " " << end_f.d << std::endl;
-          }
           
           loop_num ++;
           //if (loop_num == 3)
           //  exit(0);
-          std::cout << "******  END  ******" << std::endl;
           
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;

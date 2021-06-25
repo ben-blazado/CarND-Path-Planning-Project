@@ -83,8 +83,8 @@ class Localization {
   public:
   
     Localization(vector<double>& maps_s, vector<double>& maps_x, 
-        vector<double>& maps_y, vector<double>maps_dx, vector<double> maps_dy, 
-        double secs_per_tick);
+        vector<double>& maps_y, vector<double>maps_nx, vector<double> maps_ny, 
+        double max_s, double secs_per_tick);
         
     ~Localization();
     
@@ -107,17 +107,16 @@ class Localization {
     vector<double> maps_s_;
     vector<double> maps_x_;
     vector<double> maps_y_;
-    vector<double> maps_dx_;
-    vector<double> maps_dy_;
-    vector<double> maps_s_theta_;
+    vector<double> maps_nx_;
+    vector<double> maps_ny_;
     
-    int num_map_points_;
-    const double kMaxS_ = 6945.554;  // per project readme
+    int    num_map_points_;
+    double max_s_ = 6945.554;  // max S per project readme
     
-    spline spline_sx_;
-    spline spline_sy_;
-    spline spline_sdx_;
-    spline spline_sdy_;
+    spline sx_;
+    spline sy_;
+    spline snx_;
+    spline sny_;
     
     int GetStartPoint(double s);
     int GetStartPoint(CartP p);

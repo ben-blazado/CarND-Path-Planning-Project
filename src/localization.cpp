@@ -99,28 +99,28 @@ vector<double> quad_root(double a, double b, double c) {
   
 
 Localization::Localization(vector<double>& maps_s, vector<double>& maps_x, 
-        vector<double>& maps_y, vector<double>maps_dx, vector<double> maps_dy, 
-        double secs_per_tick) {
+        vector<double>& maps_y, vector<double>maps_nx, vector<double> maps_ny, 
+        double max_s, double secs_per_tick) {
           
   maps_s_ = maps_s;
   maps_x_ = maps_x;
   maps_y_ = maps_y;
-  maps_dx_ = maps_dx;
-  maps_dy_ = maps_dy;
+  maps_nx_ = maps_nx;
+  maps_ny_ = maps_ny;
   
-  // append last point data
-  maps_s_.push_back(kMaxS_);
+  // append last point data for max S to wrap back around to first element
+  maps_s_.push_back(max_s);
   maps_x_.push_back(maps_x_[0]);
   maps_y_.push_back(maps_y_[0]);
-  maps_dx_.push_back(maps_dx_[0]);
-  maps_dy_.push_back(maps_dy_[0]);
+  maps_nx_.push_back(maps_nx_[0]);
+  maps_ny_.push_back(maps_ny_[0]);
   
   num_map_points_ = maps_s_.size();
   
-  spline_sx_ = spline(maps_s_, maps_x_);
-  spline_sy_ = spline(maps_s_, maps_y_);
-  spline_sdx_ = spline(maps_s_, maps_dx_);
-  spline_sdy_ = spline(maps_s_, maps_dy_);
+  sx_  = spline(maps_s_, maps_x_);
+  sy_  = spline(maps_s_, maps_y_);
+  snx_ = spline(maps_s_, maps_nx_);
+  sny_ = spline(maps_s_, maps_ny_);
   
   cart_.x.v   = 0;
   cart_.y.v   = 0;
@@ -198,10 +198,8 @@ CartP Localization::CalcXY(FrenetP f) {
   
   CartP p;
   
-  p.x = spline_sx_(f.s) + f.d*spline_sdx_(f.s);
-  p.y = spline_sy_(f.s) + f.d*spline_sdy_(f.s);
-  
-  cout << "CalcXY complete." << endl;
+  p.x = sx_(f.s) + f.d*snx_(f.s);
+  p.y = sy_(f.s) + f.d*sny_(f.s);
   
   return p;
 }
@@ -209,116 +207,53 @@ CartP Localization::CalcXY(FrenetP f) {
 
 FrenetP Localization::CalcSD(CartP p) {
   
-  FrenetP f;
+  FrenetP frenet;
   
-  int start_point = GetStartPoint(p);
-  
+  int    start_point = GetStartPoint(p);
   double s = maps_s_[start_point];
   
-  double precision = 0.000001;
+  double dx;
+  double dy;
+  double snx;
+  double sny;
   
-  int i = 0;
-  double g = std::numeric_limits<double>::infinity(); 
-  double g_p = 1.0; 
-  while (abs(g) > precision) {
+  int attempts = 0;
+  double delta = std::numeric_limits<double>::infinity(); 
+  const double kPrecision = 0.000000001;
+  
+  while (abs(delta) > kPrecision) {
 
-    double xs = p.x - spline_sx_(s);
-    double ys = p.y - spline_sy_(s);
+    dx = p.x - sx_(s);
+    dy = p.y - sy_(s);
 
-    double sx_p  = spline_sx_.deriv(1, s);
-    double sy_p  = spline_sy_.deriv(1, s);
-    
-    double sdx = spline_sdx_(s);
-    double sdy = spline_sdy_(s);
+    snx = snx_(s);
+    sny = sny_(s);
 
-    double sdx_p = spline_sdx_.deriv(1, s);
-    double sdy_p = spline_sdy_.deriv(1, s);
-    
-    g = xs*sdy - ys*sdx;
-    g_p = xs*sdy_p - sx_p*sdy - ys*sdx_p + sy_p*sdx;
-    
-    s = s - g/g_p;
-    
-    cout << "s  " << s << endl;    
-    cout << "----" << endl;    
-    
-    i ++;
-    if (i > 10) {
-          cout << "s did not converge." << endl;
-      break;
-    }
-    
-  }
-  
-  f.s = s;
-  f.d = distance (p.x, p.y, spline_sx_(s), spline_sy_(s));
-  
-  cout << "Calc SD complete." << endl;
- 
-  return f;
-}
+    double sx_p  = sx_.deriv(1, s);  // s sub-x prime (first derivative)
+    double sy_p  = sy_.deriv(1, s);
 
-
-/*    
-FrenetP Localization::CalcSD(CartP p) {
-  
-  FrenetP f;
-  
-  int start_point = GetStartPoint(p);
-  
-  double s = maps_s_[start_point];
-  
-  double precision = 0.000000000001;
-  
-  int i = 0;
-  double D_sqr_p = std::numeric_limits<double>::infinity(); 
-  while (abs(D_sqr_p) > precision) {
-
-    double xs = p.x - spline_sx_(s);
-    double ys = p.y - spline_sy_(s);
-
-    double sx_p  = spline_sx_.deriv(1, s);
-    double sy_p  = spline_sy_.deriv(1, s);
+    double snx_p = snx_.deriv(1, s);
+    double sny_p = sny_.deriv(1, s);
     
-    double sx_pp = spline_sx_.deriv(2, s);
-    double sy_pp = spline_sy_.deriv(2, s);
+    double f = dx*sny - dy*snx;
+    double f_p = dx*sny_p - sx_p*sny - dy*snx_p + sy_p*snx;
     
-    D_sqr_p  = (-2) * (xs*sx_p + ys*sy_p);
-    double D_sqr_pp = (-2) * (xs*sx_pp - sx_p*sx_p + ys*sy_pp - sy_p*sy_p);
+    delta = f/f_p;
+    s = s - delta;
     
-    //double D = distance (p.x, p.y, spline_sx_(s), spline_sy_(s));    
-    //double D_sqr_p = 2*(xs)*(-sx_p) + 2*(ys)*(-sy_p);
-    //double D_p = (1/(2*D)) * (D_sqr_p);
-    //double D_neg_sqrt_prime = -0.5 * D_p / sqrt(D*D*D);
-    //double D_sqr_pp = 2*(xs*(-sx_pp)+sx_p*sx_p) + 2*(ys*(-sy_pp)+ sy_p*sy_p);
-    //double D_pp = 0.5*(sqrt(D) * D_sqr_pp + D_neg_sqrt_prime * D_sqr_p);
-    //double m = (0.5*D_sqr_p/D);
-    //double m_p = 0.5*(D_sqr_pp / sqrt(D) + D_neg_sqrt_prime*D_sqr_p);
-    //double m_p = 2*(D*D_pp + D_p*D_p);
-    //double m = 2*D*D_p;
-    
-    s = s - D_sqr_p/D_sqr_pp;
-    
-    // cout << "s  " << s << endl;    
-    // cout << "delta  " << delta << endl;    
-    // cout << "----" << endl;    
-    
-    i ++;
-    if (i > 10) {
+    attempts ++;
+    if (attempts > 10) {
       cout << "s did not converge." << endl;
       break;
     }
     
   }
   
-  f.s = s;
-  f.d = distance (p.x, p.y, spline_sx_(s), spline_sy_(s));
+  frenet.s = s;
+  frenet.d = (dx - dy) / (snx - sny);
   
-  cout << "Calc SD complete." << endl;
- 
-  return f;
+  return frenet;
 }
-*/    
 
 
 FrenetK Localization::frenet() {
@@ -417,7 +352,7 @@ void Localization::Run () {
 
 void Localization::Test() {
   
-  /*-------------------  */
+  /*------------------- 
 
   
   cout << "test " << endl;
