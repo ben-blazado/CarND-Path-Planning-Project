@@ -11,6 +11,7 @@
 using std::vector;
 using std::mutex;
 using std::thread;
+using tk::spline;
 
 // PVA - position, velocity, acceleration
 typedef struct {
@@ -78,24 +79,6 @@ class Origin {
 };
     
 
-class spline2 : public tk::spline {
-  
-  
-  public:
-    spline2() : spline() {
-      ;
-    }
-    
-    spline2(const std::vector<double>& X, const std::vector<double>& Y) :
-        tk::spline(X, Y) {
-      ;
-    }
-        
-    vector<double> where_deriv_zero();
-    vector<double> closest_x(double x, double y);
-};
-
-
 class Localization {
   public:
   
@@ -129,12 +112,12 @@ class Localization {
     vector<double> maps_s_theta_;
     
     int num_map_points_;
+    const double kMaxS_ = 6945.554;  // per project readme
     
-    spline2 spline_sx_;
-    spline2 spline_sy_;
-    spline2 spline_sdx_;
-    spline2 spline_sdy_;
-    spline2 spline_y_;
+    spline spline_sx_;
+    spline spline_sy_;
+    spline spline_sdx_;
+    spline spline_sdy_;
     
     int GetStartPoint(double s);
     int GetStartPoint(CartP p);
