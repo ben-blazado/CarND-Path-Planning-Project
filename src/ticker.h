@@ -4,20 +4,19 @@
 class Ticker {
   public:
   
-    static Ticker& Instance();
+    Ticker(double secs_per_tick);
     
-    void Start(double secs);
     void Start();
     bool IsTicking();
     void Next();
     
-    void SetTimeHorizon(double secs);
+    void MaxSecs(double secs);
     
     // setters getters
-    double secs();
-    int    ticks();
-    void   secs_per_tick(double secs) {secs_per_tick_ = secs;};
-    double secs_per_tick() {return secs_per_tick_;};
+    double           secs();
+    int              ticks();
+    void             secs_per_tick(double secs) {secs_per_tick_ = secs;};
+    constexpr double secs_per_tick() {return secs_per_tick_;};
     
   private:
   
@@ -27,7 +26,7 @@ class Ticker {
     int ticks_;
     double secs_;
     
-    int num_ticks_;
+    double max_secs_;
     double secs_per_tick_;
 };
 

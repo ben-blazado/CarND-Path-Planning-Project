@@ -1,6 +1,7 @@
 #include "localization.h"
 #include "helpers.h"
 #include "spline.h"
+#include "ticker.h"
 
 #include <thread>
 #include <mutex>
@@ -10,295 +11,159 @@
 #include <cmath>
 #include <limits>
 
+namespace PathPlanning {
+
 using std::unique_lock;
 using std::defer_lock;
 using std::mutex;
 using std::cout;
 using std::endl;
 
-Origin::Origin (double x, double y, double rotation) {
-  
-  x_ = x;
-  y_ = y;
-  rotation_ = rotation;
-  
-  return;
-}
-
-void Origin::Transform(CartP& p) {
-  
-  // shift point relative to the origin
-  p.x -= x_;
-  p.y -= y_;
-  
-  // rotate point about the new orgin
-  double sin_rot = sin(rotation_);
-  double cos_rot = cos(rotation_);
-  
-  double x = p.x;
-  double y = p.y;
-  
-  p.x = x*cos_rot - y*sin_rot;
-  p.y = x*sin_rot + y*cos_rot;
-  
-  return;
-}
-  
-  
-void Origin::Restore(CartP& p) {
-  
-  // unrotate point
-  double sin_rot = sin(-rotation_);
-  double cos_rot = cos(-rotation_);
-  
-  double x = p.x;
-  double y = p.y;
-  
-  p.x = x*cos_rot - y*sin_rot;
-  p.y = x*sin_rot + y*cos_rot;
-  
-  // unshift point relative to new origin
-  p.x += x_;
-  p.y += y_;
-  
-  return;
-}
-  
-  
-void Origin::Transform(double& angle) {
-  
-  angle += rotation_;
-  
-  return;
-}
-
-
-void Origin::Restore(double& angle) {
-  
-  angle -= rotation_;
-  
-  return;
-  
-}
-
-
-vector<double> quad_root(double a, double b, double c) {
-  
-  vector<double> root = {};
-  
-  double discriminant = b*b - 4*a*c;
-  
-  if (discriminant >= 0) {
-  
-    root.push_back ((-b + sqrt(discriminant)) / (2*a));
-    root.push_back ((-b - sqrt(discriminant)) / (2*a));
-  }
-  
-  return root;
-}
-  
-
-Localization::Localization(vector<double>& maps_s, vector<double>& maps_x, 
-        vector<double>& maps_y, vector<double>maps_nx, vector<double> maps_ny, 
-        double max_s, double secs_per_tick) {
+Localization::Localization(Behavior& behavior, Trajectory& trajectory, 
+    Map& map, double max_s, double secs_per_update) 
+    : behavior_(behavior), trajectory_(trajectory), map_(map) {
           
-  maps_s_ = maps_s;
-  maps_x_ = maps_x;
-  maps_y_ = maps_y;
-  maps_nx_ = maps_nx;
-  maps_ny_ = maps_ny;
+  max_s_ = max_s;
+  dt_ = secs_per_update;
   
-  // append last point data for max S to wrap back around to first element
-  maps_s_.push_back(max_s);
-  maps_x_.push_back(maps_x_[0]);
-  maps_y_.push_back(maps_y_[0]);
-  maps_nx_.push_back(maps_nx_[0]);
-  maps_ny_.push_back(maps_ny_[0]);
-  
-  num_map_points_ = maps_s_.size();
-  
-  sx_  = spline(maps_s_, maps_x_);
-  sy_  = spline(maps_s_, maps_y_);
-  snx_ = spline(maps_s_, maps_nx_);
-  sny_ = spline(maps_s_, maps_ny_);
-  
-  cart_.x.v   = 0;
-  cart_.y.v   = 0;
-  frenet_.s.v = 0;
-  frenet_.d.v = 0;
-  
-  secs_per_tick_ = secs_per_tick;
-  updated_       = false;
+  processing_  = false;
+  updated_     = false;
+  buf_.updated = false;
 
   return;
 }
 
 Localization::~Localization() {
   
-  thread_alive_ = false;
-  if (thread_.joinable())
-    thread_.join();
-}
-
-int Localization::GetStartPoint(double s) {
-  
-  // use a linear search of maps_s since its pretty small
-  // start search from last element and go backward
-  int i = num_map_points_ - 1;
-  while (maps_s_[i] > s and i > 0) 
-    i --;
-  
-  return i;
-}
-
-int Localization::GetStartPoint(CartP p) {
-  
-  double lowest_d = std::numeric_limits<double>::infinity();
-  int closest;
-  
-  // find closest map point by distance
-  for (int i = 0; i < num_map_points_; i ++) {
-    double d = distance(p.x, p.y, maps_x_[i], maps_y_[i]);
-    if (d < lowest_d) {
-      lowest_d = d;
-      closest = i;
-    }
+  if (processing_) {
+    processing_ = false;
+    if (thread_.joinable())
+      thread_.join();
   }
-  
-  // use closest map point to find starting point of map segment
-  // that contains p
-  // set p as local origin rotated by bearing from p to closest point
-  CartP closest_p = {maps_x_[closest], maps_y_[closest]};
-  double bearing = atan2(closest_p.y - p.y, closest_p.x - p.x);
-  Origin origin(p.x, p.y, -bearing);    // closest_p is now in front of p  
-  
-  // find next_p to closest and transform to local origin p
-  int next = (closest + 1) % num_map_points_;
-  CartP next_p = {maps_x_[next], maps_y_[next]};
-  origin.Transform(next_p);
-  
-  int start;
-  // check if the segment [closest, next_p] contains p
-  if (next_p.x > 0) {
-    // the segment [closest, next_p] can not contain p
-    // select prev to closest as start point
-    // https://stackoverflow.com/a/33664449
-    start = (num_map_points_ + closest - 1) % num_map_points_;
-  }
-  else
-    // the segment [closest, next_p] must contain p
-    // select closest point as start point
-    start = closest;
-  
-  return start; // closest point behind p
+
 }
 
- 
-CartP Localization::CalcXY(FrenetP f) {
-  
-  CartP p;
-  
-  p.x = sx_(f.s) + f.d*snx_(f.s);
-  p.y = sy_(f.s) + f.d*sny_(f.s);
-  
-  return p;
-}
+void Localization::Receive (double car_x, double car_y, 
+      double car_yaw, double car_speed, 
+      const vector<double>& previous_path_x, 
+      const vector<double>& previous_path_y) {
 
-
-FrenetP Localization::CalcSD(CartP p) {
-  
-  FrenetP frenet;
-  
-  int    start_point = GetStartPoint(p);
-  double s = maps_s_[start_point];
-  
-  double dx;
-  double dy;
-  double snx;
-  double sny;
-  
-  int attempts = 0;
-  double delta = std::numeric_limits<double>::infinity(); 
-  const double kPrecision = 0.000000001;
-  
-  while (abs(delta) > kPrecision) {
-
-    dx = p.x - sx_(s);
-    dy = p.y - sy_(s);
-
-    snx = snx_(s);
-    sny = sny_(s);
-
-    double sx_p  = sx_.deriv(1, s);  // s sub-x prime (first derivative)
-    double sy_p  = sy_.deriv(1, s);
-
-    double snx_p = snx_.deriv(1, s);
-    double sny_p = sny_.deriv(1, s);
+  if (buf_.m.try_lock()) {
     
-    double f = dx*sny - dy*snx;
-    double f_p = dx*sny_p - sx_p*sny - dy*snx_p + sy_p*snx;
+    buf_.car_x        = car_x;
+    buf_.car_y        = car_y;
+    buf_.car_yaw      = car_yaw;
+    buf_.car_speed    = car_speed;
+    buf_.prev_path_x  = previous_path_x;
+    buf_.prev_path_y  = previous_path_y;
+    buf_.updated      = true;
+    cout << "Localization::Update() " << endl;
+    cout << "previous_path_x " << previous_path_x.size() << endl;
     
-    delta = f/f_p;
-    s = s - delta;
-    
-    attempts ++;
-    if (attempts > 10) {
-      cout << "s did not converge." << endl;
-      break;
-    }
-    
-  }
-  
-  frenet.s = s;
-  frenet.d = (dx - dy) / (snx - sny);
-  
-  return frenet;
-}
-
-
-FrenetK Localization::frenet() {
-  
-  unique_lock<mutex> u_lock(mutex_, defer_lock);
-  FrenetK frenet;
-  
-  u_lock.lock();
-  frenet = frenet_;
-  u_lock.unlock();
-  
-  return frenet;
-}
-
-
-void Localization::Update (double car_x, double car_y, double car_s, double car_d,
-        double car_yaw, double car_speed) {
-
-  unique_lock<mutex> u_lock(mutex_, defer_lock);
-  
-  if (u_lock.try_lock()) {
-    time_point now = GetTimePoint();
-    localization_data_ = LocalizationData{car_x, car_y, car_s, car_d, 
-        car_yaw, car_speed, now};
-    updated_ = true;
-    u_lock.unlock();
+    buf_.m.unlock();
   }
   
   return;
 }
-  
 
-void Localization::Run () {
+void Localization::Update()
+{
+  buf_.m.lock();
   
-  thread_alive_ = true;
+  updated_ = buf_.updated;
+  if (updated_) {
+    
+    car_x_       = buf_.car_x;
+    car_y_       = buf_.car_y;
+    car_yaw_     = buf_.car_yaw;
+    car_speed_   = buf_.car_speed;
+    prev_path_x_ = buf_.prev_path_x;
+    prev_path_y_ = buf_.prev_path_y;
+    
+    buf_.updated = false;
+  }
   
-  thread_ = thread( [this] {
-    
-    unique_lock<mutex> u_lock(mutex_, defer_lock);
-    
-    while (thread_alive_) {
+  buf_.m.unlock();
+  
+  return;
+}
+ 
+void Localization::ProcessUpdates () {
+
+  while (processing_) {
+
+    Update();
+
+    if (updated_) {
       
-      if (u_lock.try_lock()) { 
-        if (updated_) {
+      // calculate last point in frenet coordinates from previous path 
+      Cartesian         last_p;  // last point from previous path
+      Kinematic<Frenet> last_f;  // last point in frenet from previous path
+      double ds;  // s distance for calculate v along s
+      double dd;  // d distance for calculate v along d
+      
+      int last = prev_path_x_.size() - 1;
+
+      if (last >= 0)
+        last_p = {prev_path_x_[last], prev_path_y_[last]};
+      else 
+        last_p = {car_x_, car_y_};
+      
+      cout << "Localization::ProcessUpdates() : prev_p " << last_p.x << " " << last_p.y << endl;
+      last_f.p = map_.CalcFrenet(last_p);
+      
+      // calculate ds and dd
+      if (last > 0) {
+        // use last 2 to calculate last car heading and veolocity
+        Cartesian prev_last_p;
+        prev_last_p.x      = prev_path_x_[last-1];
+        prev_last_p.y      = prev_path_y_[last-1];
+        Frenet prev_last_f = map_.CalcFrenet(prev_last_p);
           
+        // calculate rest of frenet kinematics from previous path
+        ds = last_f.p.s - prev_last_f.s;
+        dd = last_f.p.d - prev_last_f.d;
+        
+      } 
+      else {
+        // project next point to calculate to have two points
+        Cartesian next_p;
+        next_p.x = last_p.x + car_speed_*cos(car_yaw_)*dt_;
+        next_p.y = last_p.y + car_speed_*sin(car_yaw_)*dt_;;
+        
+        Frenet next_f = map_.CalcFrenet(next_p);
+        ds = next_f.s - last_f.p.s;
+        dd = next_f.d - last_f.p.d;
+      }
+      
+      // calculate rest of kinematics
+      last_f.v.s = ds / dt_;
+      last_f.v.d = dd / dt_;
+      last_f.a.s = 0;
+      last_f.a.d = 0;
+      
+      cout << "Localization::ProcessUpdates() " << endl;
+      // use prev_f as starting point for behavior module
+      if (prev_path_x_.size() < 150)
+        behavior_.Receive(last_f);
+      trajectory_.Receive(prev_path_x_, prev_path_y_);
+      
+      updated_ = false;
+      
+    }
+  }  // while
+}
+ 
+void Localization::Run() {
+  
+  processing_ = true;
+  thread_ = thread( [this] {ProcessUpdates ();} ); // thread
+    
+  return;
+}
+
+
+          /*
           // calculate seconds since last update
           static time_point prev_tp = localization_data_.tp;
           double secs = DiffTimePoint(localization_data_.tp, prev_tp);
@@ -339,15 +204,9 @@ void Localization::Run () {
           
           updated_ = false;
           prev_tp = localization_data_.tp;          
+          */
           
-        }
-        u_lock.unlock();
-      }
-    }  // while
-  }); // thread
-    
-  return;
-}
+
 
 
 void Localization::Test() {
@@ -549,3 +408,5 @@ void Localization::Test() {
     
   
 }
+
+} //namespace PathPlanning

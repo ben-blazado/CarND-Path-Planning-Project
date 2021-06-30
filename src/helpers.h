@@ -6,6 +6,7 @@
 #include <vector>
 #include <chrono>
 
+
 // for convenience
 using std::string;
 using std::vector;
@@ -50,9 +51,8 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 typedef std::chrono::system_clock system_clock;
 typedef std::chrono::time_point<system_clock> time_point;
 
-time_point GetTimePoint();
+time_point GetTimeNow();
 double DiffTimePoint(time_point tp_f, time_point tp_i); // in seconds
-
-void test(void* p);
-
+  
+  
 #endif  // HELPERS_H

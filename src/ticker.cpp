@@ -5,60 +5,40 @@
 using std::ceil;
 
 
-Ticker& Ticker::Instance() {
+Ticker::Ticker(double secs_per_tick) {
   
-  static Ticker ticker_;
-  
-  return ticker_;
-}
-
-
-Ticker::Ticker() {
-  
-  ticks_         = 0;
+  secs_per_tick_ = secs_per_tick;
   secs_          = 0;
-  num_ticks_     = 5;
-  secs_per_tick_ = 0.2;
+  max_secs_      = 0;
   
   return;
 }
 
-
-void Ticker::Start(double secs) {
-  
-  SetTimeHorizon(secs);
-  
-  Start();
-  
-  return;
-}
 
 void Ticker::Start() {
   
-  ticks_ = 0;
-  secs_ = 0;
+  secs_  = secs_per_tick_;
   
   return;
 }
 
 
 bool Ticker::IsTicking() {
-  return ticks_ < num_ticks_;
+  return secs_ <= max_secs_;
 }
 
 
 void Ticker::Next() {
   
-  ticks_ ++;
   secs_ += secs_per_tick_;
   
   return;
 }
 
 
-void Ticker::SetTimeHorizon(double secs) {
+void Ticker::MaxSecs(double max_secs) {
   
-  int num_ticks_ = ceil(secs / secs_per_tick_);
+  max_secs_ = max_secs;
   
   return;
 };

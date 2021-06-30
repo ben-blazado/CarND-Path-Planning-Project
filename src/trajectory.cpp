@@ -1,111 +1,179 @@
-#include <cmath>
-
 #include "trajectory.h"
 
-using Eigen::MatrixXd;
-using Eigen::VectorXd;
-using std::abs;
+#include <iostream>
+#include <thread>
+#include <vector>
+#include <mutex>
 
-vector<double> JMTCoeffs(Kinematics &start, Kinematics &end, double t) {
-  /**
-   * Calculate the Jerk Minimizing Trajectory that connects the initial state
-   * to the final state in time T.
-   *
-   * @param start - the vehicles start location given as a length three array
-   *   corresponding to initial values of [s, s_dot, s_double_dot]
-   * @param end - the desired end state for vehicle. Like "start" this is a
-   *   length three array.
-   * @param T - The duration, in seconds, over which this maneuver should occur.
-   *
-   * @output an array of length 6, each value corresponding to a coefficent in 
-   *   the polynomial:
-   *   s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
-   *
-   * EXAMPLE
-   *   > JMT([0, 10, 0], [10, 10, 0], 1)
-   *     [0.0, 10.0, 0.0, 0.0, 0.0, 0.0]
-   */
-  double t2 = t*t;
-  double t3 = t2*t;
-  double t4 = t3*t;
-  double t5 = t4*t;
+namespace PathPlanning {
   
-  MatrixXd T_mat = MatrixXd(3, 3);
-  VectorXd A_vec = VectorXd(3);
+using std::cout;
+using std::endl;
+
+Trajectory::Trajectory(Map& map) : map_(map) {
   
-  T_mat <<   t3,    t4,    t5,
-           3*t2,  4*t3,  5*t4,
-            6*t, 12*t2, 20*t3;
-           
-  A_vec << end.p - (start.p + start.v*t + 0.5*start.a*t2),
-           end.v - (start.v + start.a*t),
-           end.a - start.a;
-          
-  A_vec = T_mat.inverse()*A_vec;
+  processing_ = false;
   
-  return {start.p, start.v, start.a/2.0, A_vec[0], A_vec[1], A_vec[2]};
+  updated_         = false;
+  buf_.updated     = false;
+  snd_buf_.updated = false;
+  
+  return;
 }
 
-
-double QuinticPosition (double secs, vector<double> coeffs) {
+Trajectory::~Trajectory() {
   
-  double sum = 0.0;
-  for (int i = 0; i < coeffs.size(); i ++) {
-    sum += coeffs[i] + pow(secs, i);
-    
-  return sum;
-}
-
-// set class variable ticker to the singleton
-static Ticker& Trajectory::ticker_ = Ticker::inst();
-
-
-void Trajectory::Trajectory() {
-  // Nothing to initialize.
-}
-
-
-void Trajectory::Generate(FrenetKinematic& start, FrenetKinematic& end,
-    double time_horizon)  {
-  
-  vector<double> s_coeffs = JMTCoeffs(start.s, end.s);
-  vector<double> d_coeffs = JMTCoeffs(start.d, end.d);
-  
-  for (ticker_.Start(time_horizon); ticker_.IsTicking(); ticker_.Next()) {
-    double secs = ticker_.secs()
-    double s = QuinticPosition(secs, s_coeffs);
-    double d = QuinticPosition(secs, d_coeffs);
-    
-    vector<double> xy = GetXY(s, d)
-
-    s_vals_.push_back(s);
-    d_vals_.push_back(d);
-    x_vals_.push_back(xy[0]);
-    y_vals_.psuh_back(xy[1]);
-  }
-}
-
-
-void Trajectory::Generate(CartP& start, CartV& vel, double time_horizon) {
-  
-  for (ticker_.Start(time_horizon); ticker_.IsTicking(); ticker_.Next()) {
-    
-    double secs = ticker_.Secs();
-    
-    double x = start.x + vel.x * secs;
-    double y = start.y + vel.y * secs;
-    
-    vector<double> sd = getFrenet(x, y);
-    
-    x_vals_.push_back(x);
-    y_vals_.push_back(y);
-    s_vals_.push_back(sd[0]);  //s
-    d_vals_.push_back(sd[1]);  //d
+  if (processing_) {
+    processing_ = false;
+    if (thread_.joinable())
+      thread_.join();
   }
   
   return;
 }
+
+void Trajectory::Receive(const vector<Frenet>& waypoints)  {
+  
+  if (buf_.m.try_lock()) {
+    
+    buf_.waypoints = waypoints;
+    buf_.updated  = true;
+    
+    // cout << "Trajectory updated with best waypoints" << endl;
+    //speed_options[1]
+    cout << "Trajectory::Update () " << endl;
+    cout << "waypoints size " << buf_.waypoints.size() << endl;
+    
+    
+    buf_.m.unlock();
+  }
+
+  return;
+}
+  
+void Trajectory::Receive(vector<double>& previous_path_x, 
+    vector<double>& previous_path_y) {
+    
+  if (buf_.m.try_lock()) {
+    
+    buf_.prev_path_x = previous_path_x;
+    buf_.prev_path_y = previous_path_y;
+    buf_.updated = true;
+    
+    cout << "Travejectory::Update() " << endl;
+    cout << "Previous path size " << previous_path_x.size() << endl;
+    
+    buf_.m.unlock();
+  }
+
+  return;
+}
+
+void Trajectory::Update() {
+  
+  buf_.m.lock();
+  
+  if (buf_.updated) {
+    
+    updated_     = true;
+    waypoints_   = buf_.waypoints;
+    prev_path_x_ = buf_.prev_path_x;
+    prev_path_y_ = buf_.prev_path_y;
+    
+    buf_.updated = false;
+  }
+  
+  buf_.m.unlock();
+}
+
+void Trajectory::Send() {
+  
+  if (snd_buf_.m.try_lock()) {
+    
+    snd_buf_.next_x_vals = next_x_vals_;
+    snd_buf_.next_y_vals = next_y_vals_;
+    snd_buf_.updated = true;
+    snd_buf_.m.unlock();
+  }
+  
+  return;
+}
+
+void Trajectory::GetNextXYVals (vector<double>& next_x_vals, 
+    vector<double>& next_y_vals) {
+      
+  //cout << "GetXY trying to lock" << endl;
+  
+  if (snd_buf_.m.try_lock()) {
+    
+    //cout << "GetXY axquired lock" << endl;
+    
+    if (snd_buf_.updated) {
+      next_x_vals = snd_buf_.next_x_vals;
+      next_y_vals = snd_buf_.next_y_vals;
+      snd_buf_.updated = false;
+      
+      cout << "Trajectory::GetXYVals() " << next_x_vals.size() << endl;
+    }
+
+    snd_buf_.m.unlock();
+    
+    //cout << "GetXY unlocked lock" << endl;
+  }
+}
+
+
+
+void Trajectory::ProcessUpdates () {
+  
+  while (processing_) {
+    
+    Update();
+      
+    if (updated_) {
+      
+      if (prev_path_x_.size() > 0) {
+        // add waypoints from previous path
+        next_x_vals_ = prev_path_x_;
+        next_y_vals_ = prev_path_y_;
+      }
+      
+      // add waypoints from best path
+      if (next_x_vals_.size() < 150)
+        for (int i = 0; i < waypoints_.size(); i ++) {
+          Cartesian p = map_.CalcCartesian(waypoints_[i]);
+          next_x_vals_.push_back(p.x);
+          next_y_vals_.push_back(p.y);
+        } 
+        
+      Send();
+      
+      cout << "Trajectory::ProcessUpdates()" << endl;
+      cout << "next_x_vals_ " << next_x_vals_.size() << endl;
+      updated_ = false;
+      
+    }
+    
+  } // while
+  
+  return;
+}
+
+
+void Trajectory::Run () {
+  
+  processing_ = true;
+  
+  thread_ = thread( [this] { ProcessUpdates(); } );
+  
+}
+
+
+} // namespace
+    
  
+ 
+/* 
 
 void Trajectory::GetCPA (Trajectory& traj, 
         FrenetSeparation& min_sep, CPA& cpa) {
@@ -144,3 +212,4 @@ void Trajectory::GetXYVals(vector<double>& x_vals, vector<double>& y_vals) {
   return;
   
 }
+*/

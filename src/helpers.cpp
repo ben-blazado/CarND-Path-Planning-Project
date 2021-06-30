@@ -157,7 +157,7 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 //ref: https://stackoverflow.com/questions/19555121/how-to-get-current-timestamp-in-milliseconds-since-1970-just-the-way-java-gets
 //ref: https://en.cppreference.com/w/cpp/chrono/duration/duration_cast
 
-time_point GetTimePoint() {
+time_point GetTimeNow() {
   
   return system_clock::now();
 }

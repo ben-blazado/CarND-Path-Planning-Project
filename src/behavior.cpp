@@ -1,62 +1,136 @@
-#include <limits.h>
-
 #include "behavior.h"
-#include "state.h"
-#include "trajectory.h"
 
+namespace PathPlanning {
+  
+using std::cout;
+using std::endl;
 
-void Behavior::Behavior(Trajectory& traj, int max_lanes, 
-    double speed_limit, double max_acc) {
+Behavior::Behavior (Trajectory& trajectory, double max_s, 
+    double secs_per_update, double max_secs) : trajectory_(trajectory) {
   
-  max_lanes_ = max_lanes;
-  max_secs_ = 2*(speed_limit/max_acc);
-  speed_options[SpeedOption::kStop] = 0.0;
+  max_s_       = max_s;
+  max_secs_    = max_secs;
   
-  states_.resize(1);
-  //states_.resize(max_lanes_ * max_secs_ * speed_options_.size());
+  Path::SecsPerUpdate(secs_per_update);
+  Path::MaxS(max_s);
   
-  //traj_ = traj;
-  updated_ = false;
+  processing_  = false;
+  updated_     = false;
+  buf_.updated = false;
+  processing_  = false;
   
   return;
+  
 }
 
-Behavior::Update(FrenetKinematic& start) {
+Behavior::~Behavior() {
   
-  unique_lock<mutex> u_lock(mutex_, defer_lock);
+  if (processing_) {
+    processing_ = false;
+    if (thread_.joinable())
+      thread_.join();
+  }
   
-  if (u_lock.try_lock()) {
-    start_ = start;
-    //speed_options[1]
-    updated_ = true;
-    u_lock.unlock();
+}
+
+
+void Behavior::Receive(Kinematic<Frenet>& start) {
+  
+  if (buf_.m.try_lock()) {
+    
+    buf_.start    = start;
+    buf_.updated  = true;
+
+    cout << "Behavior::Update() " << start_.p.s << " " << start_.p.d << endl;
+
+    buf_.m.unlock();
   }
   
   return;
 }
 
-Behavior::GenerateStates {
+void Behavior::Update() {
+  
+  buf_.m.lock();
+  
+  if (buf_.updated) {
+    
+    updated_ = true;
+    start_   = buf_.start;
+    
+    buf_.m.unlock();
+  
+  }
+  
+  buf_.m.unlock();
+  
+  return;
+}
 
-  speed_options[SpeedOption::kMaintain] = start_.s.v;
+void Behavior::ProcessUpdates () {
+
+  while (processing_) {
+    
+    Update();
+    
+    if (updated_) {
+      GeneratePaths();
+      Path& best_path = SelectBestPath();
+      
+      vector<Frenet> waypoints = best_path.Waypoints();
+      cout << "Behavoir::ProcessUpdates() " << waypoints.size() << endl;
+      trajectory_.Receive(waypoints);
+      
+      updated_ = false;
+    }
+  } // while
   
-  int i = 0;  // index for state
+  return;
+}
+
+
+void Behavior::Run () {
   
-  int lane = DToLane(start_.s.d);
-  int max_secs_ = 10;
+  processing_ = true;
+  thread_     = thread( [this] {ProcessUpdates();} );
   
-  FrenetKinematic end;
-        
-  double speed = 35.0; 
+  return;
+}
+
+          
+int D2Lane (double d) {
   
-  end.s.p = start_.s.p + speed*t
-  end.s.v = speed;
-  end.s.a = 0;
-        
-  end.d.p = LaneToD(lane);
-  end.d.v = 0;
-  end.d.a = 0;
+  int lane = std::round ((d - 2.0) / 4.0);
   
-  states_[0].frenet(end);
+  return lane;
+}
+
+double Lane2D (int lane) {
+  
+  double d = 4.0*lane + 2.0;
+  
+  return d;
+}
+          
+void Behavior::GeneratePaths() {
+
+  paths_.clear();
+  
+  Kinematic<Frenet> end;
+  double target_vel = 21.90496; 
+  
+  end.p.s = fmod(start_.p.s + target_vel*max_secs_, max_s_);
+  end.p.d = Lane2D(D2Lane(start_.p.d));
+  
+  end.v.s = target_vel;
+  end.v.d = 0;
+  
+  end.a.s = 0;
+  end.a.d = 0;
+  
+  Path path(start_, end, max_secs_);
+  
+  paths_.push_back(path);
 
   /*
   // iterate over lane
@@ -90,8 +164,14 @@ Behavior::GenerateStates {
   */
 }
         
-State& Behavior::SelectBestState() {
+
+Path& Behavior::SelectBestPath() {
   
+  return paths_[0];
+}
+  
+  
+  /*
   State::start(start_);
   int best_; // index for best state selected
   double lowest_cost = std::numeric_limits<double>::max();
@@ -107,35 +187,8 @@ State& Behavior::SelectBestState() {
       best_ = i;
     }
   }
+  */
   
-  return state_[best_];
-}
 
-void Behavior::Run () {
-  
-  thread_alive_ = true;
-  
-  thread_ = std::thread([this]{
-    
-    unique_lock<mutex> u_lock(mutex_, defer_lock);
-    
-    while (thread_alive_) 
-      if (u_lock.try_lock()) {
-        if (updated_) {
-          
-          GenerateStates();
-          State& best_state = state[0];
-          best_state.identify();
-          // State& best_state = SelectBestState();
-          
-          //trajectory_.Update(best_state.traj());
-          
-          updated_ = false;
-        }
-        u_lock.unlock();
-      }
-      
-  });
-  
-  return;
-}
+
+} // namespace PathPlanning

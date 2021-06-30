@@ -1,42 +1,63 @@
 #ifndef TRAJECTORY_H
 #define TRAJECTORY_H
 
-#include "ticker.h"
+#include "map.h"
+#include "path.h"
 
+#include <thread>
+#include <mutex>
 
-// CPA - closest point of approach
-typedef struct {
-  double dist;  // distance at CPA
-  double secs;  // secs at CPA
-} CPA;
+namespace PathPlanning {
 
+using std::mutex;
+using std::thread;
 
 class Trajectory {
+  
   public:
   
-    void ~Trajectory() {};
+    Trajectory(Map& map);
+    ~Trajectory();
     
-    static void SetMaps(vector<double>& maps_s, vector<double>& maps_x,
-        vector<double>& maps_x
-    
-    void Generate(FrenetKinematic& start, FrenetKinematic& end);
-    void Generate(CartP& start, CartV& vel);
-    
-    void GetCPA (Trajectory& traj, FrenetSeparation& min_sep, CPA& cpa);
-    
-    void GetXYVals(vector<double>& x_vals, vector<double>& y_vals);
+    void Receive(const vector<Frenet>& waypoints);
+    void Receive(vector<double>& prev_path_x, vector<double>& prev_path_y);
+    void Run();
+    void GetNextXYVals(vector<double>& next_x_vals, vector<double>& next_y_vals);
   
   private:
-  
-    static vector<double> maps_s_; 
-    static vector<double> maps_x_; 
-    static vector<double> maps_y_;
-  
-    static const Ticker& ticker_;
-    vector<double> s_vals_;
-    vector<double> d_vals_;
-    vector<double> x_vals_;
-    vector<double> y_vals_;
+
+    Map& map_;
+    
+    bool processing_;
+    thread thread_;
+    mutex  mutex_;
+    struct {
+      mutex m;
+      bool  updated;
+      vector<Frenet> waypoints;
+      vector<double> prev_path_x;
+      vector<double> prev_path_y;
+    } buf_;
+    bool updated_;
+    struct {
+      mutex m;
+      bool  updated;
+      vector<double> next_x_vals;
+      vector<double> next_y_vals;
+    } snd_buf_;
+    
+    vector<Frenet> waypoints_;
+    vector<double> prev_path_x_;
+    vector<double> prev_path_y_;
+    vector<double> next_x_vals_;
+    vector<double> next_y_vals_;
+    
+    void Update();
+    void ProcessUpdates();
+    void Send();
+    
 };
+
+} // PathPlanning
 
 #endif

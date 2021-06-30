@@ -9,15 +9,20 @@
 #include "json.hpp"
 
 // blazado: project inlcude files
-#include <thread>
+// #include <thread>
+#include "map.h"
+#include "behavior.h"
 #include "localization.h"
-#include "ticker.h"
 
 // for convenience
 using nlohmann::json;
 using std::string;
 using std::vector;
 
+using PathPlanning::Map;
+using PathPlanning::Behavior;
+using PathPlanning::Localization;
+using PathPlanning::Trajectory;
 
 int main() {
   uWS::Hub h;
@@ -57,35 +62,23 @@ int main() {
   }
   
   // blazado: module initizalization
-  Ticker::Instance().secs_per_tick(0.2);
-  // Behavior behavior;
-  Localization localization(map_waypoints_s, map_waypoints_x, map_waypoints_y,
-    map_waypoints_dx, map_waypoints_dy, 6945.554, Ticker::Instance().secs_per_tick());
-  std::cout<<"run"<<std::endl;    
-
-    
-  //Behavior behavior(localization);
-  //Trajectory trajectory(localization, behavior);
+  double secs_per_update = 0.02;
+  double max_secs        = 3.0;  // planning horizon
   
-  // localization.Run();
-  // localization.Test();
-  //behavior.Run();
-  //trajectory.Run();
+  Map          map(map_waypoints_s, map_waypoints_x, map_waypoints_y,
+                   map_waypoints_dx, map_waypoints_dy, max_s);
+  Trajectory   trajectory(map);
+  Behavior     behavior(trajectory, max_s, secs_per_update, max_secs);
+  Localization localization(behavior,trajectory, map, max_s, secs_per_update);
+    
+  localization.Run();
+  behavior.Run();
+  trajectory.Run();
   
   //https://stackoverflow.com/questions/5395309/how-do-i-force-cmake-to-include-pthread-option-during-compilation
-  
-  double vel=0;
-  double old_x;
-  double old_y;
-  bool first = true;
-  int loop_num = 0;
-  
-  double end_s;
-  double end_d;
-  
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy,&localization,&vel,&old_x, &old_y, &first, &loop_num, &end_s, &end_d]
+               &map_waypoints_dx,&map_waypoints_dy,&localization,&trajectory]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -132,11 +125,13 @@ int main() {
            *   sequentially every .02 seconds
            */
            
-          //localization.Update(car_x, car_y, car_s, car_d, 
-          //    car_yaw, car_speed);
+          localization.Receive(car_x, car_y, car_yaw, car_speed, 
+            previous_path_x, previous_path_y);
+            
+          //std::cout << "GetXYVals" << std::endl;
+          trajectory.GetNextXYVals(next_x_vals, next_y_vals);
           
-          //trajectory.GetXYVals(next_x_vals, next_y_vals);
-          
+          /*
           FrenetP f;
           int path_remaining =  previous_path_x.size();
           double acc = 4.4704;  // m/s2
@@ -170,6 +165,7 @@ int main() {
           loop_num ++;
           //if (loop_num == 3)
           //  exit(0);
+          */
           
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
@@ -204,9 +200,5 @@ int main() {
     return -1;
   }
   
-  std::cout << "about to run" << std::endl;
-  
   h.run();
-  
-  std::cout << "ended" << std::endl;
 }

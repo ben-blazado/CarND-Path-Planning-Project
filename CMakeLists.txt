@@ -9,7 +9,10 @@ set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
 
 set(sources src/main.cpp
             src/localization.cpp
-	    src/ticker.cpp
+	    src/behavior.cpp
+	    src/trajectory.cpp
+	    src/path.cpp
+	    src/map.cpp
 	    src/helpers.cpp)
 
 
