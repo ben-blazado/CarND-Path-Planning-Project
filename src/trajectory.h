@@ -3,6 +3,7 @@
 
 #include "map.h"
 #include "path.h"
+#include "buffer.h"
 
 #include <thread>
 #include <mutex>
@@ -19,10 +20,23 @@ class Trajectory {
     Trajectory(Map& map);
     ~Trajectory();
     
-    void Receive(const vector<Frenet>& waypoints);
-    void Receive(vector<double>& prev_path_x, vector<double>& prev_path_y);
+    struct BehaviorInput {
+      Frenet         start;
+      vector<Frenet> waypoints;
+    };
+    struct LocalizationInput {
+      Frenet         last_f;
+      vector<double> prev_path_x;
+      vector<double> prev_path_y;
+    };
+    struct OutputData {
+      vector<double> next_x_vals;
+      vector<double> next_y_vals;
+    };
+    void Input(BehaviorInput& beh_in);
+    void Input(LocalizationInput& loc_in);
     void Run();
-    void GetNextXYVals(vector<double>& next_x_vals, vector<double>& next_y_vals);
+    void Output(OutputData& out);
   
   private:
 
@@ -31,31 +45,17 @@ class Trajectory {
     bool processing_;
     thread thread_;
     mutex  mutex_;
-    struct {
-      mutex m;
-      bool  updated;
-      vector<Frenet> waypoints;
-      vector<double> prev_path_x;
-      vector<double> prev_path_y;
-    } buf_;
-    bool updated_;
-    struct {
-      mutex m;
-      bool  updated;
-      vector<double> next_x_vals;
-      vector<double> next_y_vals;
-    } snd_buf_;
     
-    vector<Frenet> waypoints_;
-    vector<double> prev_path_x_;
-    vector<double> prev_path_y_;
-    vector<double> next_x_vals_;
-    vector<double> next_y_vals_;
+    BehaviorInput          beh_in_;
+    Buffer<BehaviorInput>  beh_in_buf_;
     
-    void Update();
-    void ProcessUpdates();
-    void Send();
+    LocalizationInput          loc_in_;
+    Buffer<LocalizationInput>  loc_in_buf_;
     
+    OutputData         out_;
+    Buffer<OutputData> out_buf_;
+    
+    void ProcessInputs();
 };
 
 } // PathPlanning

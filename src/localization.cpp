@@ -1,7 +1,7 @@
 #include "localization.h"
 #include "helpers.h"
 #include "spline.h"
-#include "ticker.h"
+#include "buffer.h"
 
 #include <thread>
 #include <mutex>
@@ -20,15 +20,11 @@ using std::cout;
 using std::endl;
 
 Localization::Localization(Behavior& behavior, Trajectory& trajectory, 
-    Map& map, double max_s, double secs_per_update) 
-    : behavior_(behavior), trajectory_(trajectory), map_(map) {
+    Map& map, double secs_per_update) 
+    : behavior_ (behavior), trajectory_(trajectory), map_ (map) {
           
-  max_s_ = max_s;
   dt_ = secs_per_update;
-  
   processing_  = false;
-  updated_     = false;
-  buf_.updated = false;
 
   return;
 }
@@ -43,113 +39,158 @@ Localization::~Localization() {
 
 }
 
-void Localization::Receive (double car_x, double car_y, 
-      double car_yaw, double car_speed, 
-      const vector<double>& previous_path_x, 
-      const vector<double>& previous_path_y) {
+void Localization::Input (InputData& in) {
+  
+  in_buf_.Write(in);
+  
+  return;
+}
 
-  if (buf_.m.try_lock()) {
+
+// Ensures prev path has at least 2 waypoints.
+// This prepares prev_path to be used in CalcLastPos, CalcLastVel, CalcLastAcc.
+void Localization::VerifyPrevPath() {
+  
+  int num_waypoints = in_.prev_path_x.size();
+  
+  if (num_waypoints < 2) {
     
-    buf_.car_x        = car_x;
-    buf_.car_y        = car_y;
-    buf_.car_yaw      = car_yaw;
-    buf_.car_speed    = car_speed;
-    buf_.prev_path_x  = previous_path_x;
-    buf_.prev_path_y  = previous_path_y;
-    buf_.updated      = true;
-    cout << "Localization::Update() " << endl;
-    cout << "previous_path_x " << previous_path_x.size() << endl;
+    if (num_waypoints == 0) {
+      
+      // prev path has 0 waypoints in prev_path!
+      // use current car position for first way point.
+      in_.prev_path_x.push_back(in_.car_x);
+      in_.prev_path_y.push_back(in_.car_y);
+    }
     
-    buf_.m.unlock();
+    // add second waypoint based on car location, speed and yaw.
+    Cartesian next_p;
+    double car_speed = in_.car_speed*dt_;
+    next_p.x = in_.prev_path_x[0] + car_speed*cos(in_.car_yaw);
+    next_p.y = in_.prev_path_y[0] + car_speed*sin(in_.car_yaw);
+    
+    in_.prev_path_x.push_back(next_p.x);
+    in_.prev_path_y.push_back(next_p.y);
   }
   
   return;
 }
 
-void Localization::Update()
-{
-  buf_.m.lock();
+
+// Returns frenet position of last waypoint in prev_path.
+// Used in ProcessUpdates() to help calculate frenet kinematics
+// of starting position for Behavior module.
+Frenet Localization::CalcLastPos() {
   
-  updated_ = buf_.updated;
-  if (updated_) {
-    
-    car_x_       = buf_.car_x;
-    car_y_       = buf_.car_y;
-    car_yaw_     = buf_.car_yaw;
-    car_speed_   = buf_.car_speed;
-    prev_path_x_ = buf_.prev_path_x;
-    prev_path_y_ = buf_.prev_path_y;
-    
-    buf_.updated = false;
-  }
+  // index of last waypoint
+  int last = in_.prev_path_x.size() - 1;
+
+  // get last waypoint in cartesian
+  Cartesian last_p = {in_.prev_path_x[last], in_.prev_path_y[last]};
   
-  buf_.m.unlock();
+  // covert last waypoint from cartesian point to frenet
+  Frenet last_f = map_.CalcFrenet(last_p);
   
-  return;
+  cout << "Localization::last_f " << last_f.s << " " << last_f.d << endl;
+  
+  return last_f;
 }
+
+
+// Returns the Frenet velocity compenents of the last waypoint in prev_path_.
+// Call after CalcLastPos(). Used in ProcessUpdates() to help calculate 
+// frenet kinematics of starting position for Behavior module.
+// Call after VerifyPrevPath to ensure prev_path_ has at least 2 waypoints.
+//
+// last_f : the last frenet position of the last waypoint in prev_path.
+Frenet Localization::CalcLastVel(Frenet last_f) {
+
+  int last = in_.prev_path_x.size() - 1;
+  
+  // use last 2 waypoints to calculate ds and dd, then velocities
+  Cartesian prev_last_p;
+  prev_last_p.x      = in_.prev_path_x[last-1];
+  prev_last_p.y      = in_.prev_path_y[last-1];
+  Frenet prev_last_f = map_.CalcFrenet(prev_last_p);
+  
+  // Calculate ds and dd for use in calculating velocity.
+  // double ds = map_.Diff (last_f.s, prev_last_f.s);
+  // TODO: check below for accurate difference
+  double ds = last_f.s - prev_last_f.s;
+  double dd = last_f.d - prev_last_f.d;
+  
+  // Calculate velocity components using ds, dd, and dt.
+  Frenet last_v;
+  last_v.s = ds / dt_;  // dt_ is num secs per update (normally 0.02).
+  last_v.d = dd / dt_;
+  
+  return last_v;
+}
+      
+// Returns the acceleration of the last waypoint in prev_path.
+// Call after CalcVel(). Used in ProcessUpdates().
+// 
+// last_v: Velocity of last waypoint in prev_path. Should be
+//         calculated from CalcVel();
+Frenet Localization::CalcLastAcc(Frenet last_v) {
+  
+  // Use first two waypoints to help calculate initial velocities.
+  Cartesian first_p  = {in_.prev_path_x[0], in_.prev_path_y[0]};
+  Cartesian second_p = {in_.prev_path_x[1], in_.prev_path_y[1]};
+  
+  // Convert first two waypoints to frenet coordinates.
+  Frenet first_f  = map_.CalcFrenet(first_p);
+  Frenet second_f = map_.CalcFrenet(second_p);
+  
+  // Calculate initial velocity along s and d 
+  // based on first and second  waypoints.
+  double first_vs = map_.Diff(second_f.s, first_f.s) / dt_;
+  double first_vd = (second_f.d - first_f.d) / dt_;
+  
+  // Calculate time over first and last velocities (entire path remaining).
+  int num_waypoints = in_.prev_path_x.size();
+  double dt_acc = num_waypoints*dt_;
+  
+  // Calculate the acc along s and d using a=dv/dt.
+  Frenet acc;
+  acc.s = (last_v.s - first_vs) / dt_acc;
+  acc.d = (last_v.d - first_vd) / dt_acc;
+  
+  return acc;
+}
+
  
-void Localization::ProcessUpdates () {
+void Localization::ProcessInputs () {
 
   while (processing_) {
 
-    Update();
-
-    if (updated_) {
+    if (in_buf_.Read(in_)) {
       
-      // calculate last point in frenet coordinates from previous path 
-      Cartesian         last_p;  // last point from previous path
-      Kinematic<Frenet> last_f;  // last point in frenet from previous path
-      double ds;  // s distance for calculate v along s
-      double dd;  // d distance for calculate v along d
-      
-      int last = prev_path_x_.size() - 1;
-
-      if (last >= 0)
-        last_p = {prev_path_x_[last], prev_path_y_[last]};
-      else 
-        last_p = {car_x_, car_y_};
-      
-      cout << "Localization::ProcessUpdates() : prev_p " << last_p.x << " " << last_p.y << endl;
-      last_f.p = map_.CalcFrenet(last_p);
-      
-      // calculate ds and dd
-      if (last > 0) {
-        // use last 2 to calculate last car heading and veolocity
-        Cartesian prev_last_p;
-        prev_last_p.x      = prev_path_x_[last-1];
-        prev_last_p.y      = prev_path_y_[last-1];
-        Frenet prev_last_f = map_.CalcFrenet(prev_last_p);
-          
-        // calculate rest of frenet kinematics from previous path
-        ds = last_f.p.s - prev_last_f.s;
-        dd = last_f.p.d - prev_last_f.d;
-        
-      } 
-      else {
-        // project next point to calculate to have two points
-        Cartesian next_p;
-        next_p.x = last_p.x + car_speed_*cos(car_yaw_)*dt_;
-        next_p.y = last_p.y + car_speed_*sin(car_yaw_)*dt_;;
-        
-        Frenet next_f = map_.CalcFrenet(next_p);
-        ds = next_f.s - last_f.p.s;
-        dd = next_f.d - last_f.p.d;
-      }
-      
-      // calculate rest of kinematics
-      last_f.v.s = ds / dt_;
-      last_f.v.d = dd / dt_;
-      last_f.a.s = 0;
-      last_f.a.d = 0;
+      // verify that prev_path has at least 2 waypoints
+      VerifyPrevPath();
       
       cout << "Localization::ProcessUpdates() " << endl;
+      cout << "Localization::should be 2 or more " << in_.prev_path_x.size() << endl;
+      
+      Kinematic<Frenet> last_f;  // last point in frenet from previous path
+      last_f.p = CalcLastPos();
+      last_f.v = CalcLastVel(last_f.p);
+      last_f.a = CalcLastAcc(last_f.v);
+      
+      cout << "Localization::Last s d for input to beh " << last_f.p.s << endl;
+      cout << "Localization::Last v for input to beh " << last_f.v.s  << endl;
       // use prev_f as starting point for behavior module
-      if (prev_path_x_.size() < 150)
-        behavior_.Receive(last_f);
-      trajectory_.Receive(prev_path_x_, prev_path_y_);
       
-      updated_ = false;
+      // Pass frenet kinematics of last waypoint
+      // and number of waypoints of prev_path
+      // to behavior module to generate new path.
+      int num_waypoints = in_.prev_path_x.size();
       
+      Behavior::InputData beh_in = {last_f, num_waypoints};
+      behavior_.Input(beh_in);
+      
+      Trajectory::LocalizationInput tra_in = {last_f.p, in_.prev_path_x, in_.prev_path_y};
+      trajectory_.Input(tra_in);
     }
   }  // while
 }
@@ -157,7 +198,7 @@ void Localization::ProcessUpdates () {
 void Localization::Run() {
   
   processing_ = true;
-  thread_ = thread( [this] {ProcessUpdates ();} ); // thread
+  thread_ = thread( [this] {ProcessInputs ();} ); // thread
     
   return;
 }
@@ -165,21 +206,21 @@ void Localization::Run() {
 
           /*
           // calculate seconds since last update
-          static time_point prev_tp = localization_data_.tp;
-          double secs = DiffTimePoint(localization_data_.tp, prev_tp);
+          static time_point prev_tp = localization_in_.tp;
+          double secs = DiffTimePoint(localization_in_.tp, prev_tp);
           cout << "diff time update " << secs << endl;
           
-          double theta = deg2rad(localization_data_.car_yaw);  // car yaw in radians
+          double theta = deg2rad(localization_in_.car_yaw);  // car yaw in radians
           
           // update kinetics on cartesian coordinates
           double prev_x_v = cart_.x.v;  
-          cart_.x.p = localization_data_.car_x;
-          cart_.x.v = localization_data_.car_speed * cos(theta);
+          cart_.x.p = localization_in_.car_x;
+          cart_.x.v = localization_in_.car_speed * cos(theta);
           cart_.x.a = (cart_.x.v - prev_x_v) / secs;
           
           double prev_y_v = cart_.y.v;
-          cart_.y.p = localization_data_.car_y,
-          cart_.y.v = localization_data_.car_speed * sin(theta);
+          cart_.y.p = localization_in_.car_y,
+          cart_.y.v = localization_in_.car_speed * sin(theta);
           cart_.y.a = (cart_.y.v - prev_y_v) / secs;
           
           // update kinetics in frenet system
@@ -191,19 +232,19 @@ void Localization::Run() {
           FrenetP next_sd = CalcSD(next_p);
           
           double prev_s_v = frenet_.s.v;
-          frenet_.s.p = localization_data_.car_s;
+          frenet_.s.p = localization_in_.car_s;
           frenet_.s.v = (next_sd.s - frenet_.s.p) / secs;
           frenet_.s.a = (frenet_.s.v - prev_s_v) / secs;
           
           double prev_d_v = frenet_.d.v;
-          frenet_.d.p = localization_data_.car_d;
+          frenet_.d.p = localization_in_.car_d;
           frenet_.d.v = (next_sd.d - frenet_.d.p) / secs;
           frenet_.d.a = (frenet_.d.v - prev_d_v) / secs;
           
           // behavior.Update(frenet_);
           
           updated_ = false;
-          prev_tp = localization_data_.tp;          
+          prev_tp = localization_in_.tp;          
           */
           
 

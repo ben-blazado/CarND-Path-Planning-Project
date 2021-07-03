@@ -12,8 +12,8 @@ class Path {
 
   public:
   
-    Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t);
-    ~Path ();
+    Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
+        int num_waypoints);
     static void SecsPerUpdate(double secs) { secs_per_update_ = secs; }
     static void MaxS(double max_s)         { max_s_           = max_s; }
     

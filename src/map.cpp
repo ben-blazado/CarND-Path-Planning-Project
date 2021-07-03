@@ -19,15 +19,16 @@ Origin::Origin (double x, double y, double rotation) {
 
 void Origin::Transform(Cartesian& p) {
   
-  // shift point relative to the origin
+  // shift point relative to the instance's origin x_, y_
   p.x -= x_;
   p.y -= y_;
   
-  // rotate point about the new orgin
+  // rotate point about the instance's orgin
   double sin_rot = sin(rotation_);
   double cos_rot = cos(rotation_);
   
-  double x = p.x;
+  // store x and y coordinates temporarily before transforming!!!!
+  double x = p.x;  
   double y = p.y;
   
   p.x = x*cos_rot - y*sin_rot;
@@ -36,6 +37,9 @@ void Origin::Transform(Cartesian& p) {
   return;
 }
   
+
+// Transforms p from local origin system back to the cartesian system.
+// p should have been previously transformed with Origin::Transform().
 void Origin::Restore(Cartesian& p) {
   
   // unrotate point
@@ -48,7 +52,7 @@ void Origin::Restore(Cartesian& p) {
   p.x = x*cos_rot - y*sin_rot;
   p.y = x*sin_rot + y*cos_rot;
   
-  // unshift point relative to new origin
+  // unshift point relative to origin 0,0
   p.x += x_;
   p.y += y_;
   
@@ -96,8 +100,47 @@ Map::Map(vector<double>& maps_s,
   
   max_s_ = max_s;
   
+  return;
 }
 
+
+double Map::Add(double s, double ds) {
+  
+  return fmod (s + ds, max_s_);
+}
+
+
+double Map::Diff(double s2, double s1) {
+  
+  if (s1 > s2)
+    s2 += max_s_;
+  
+  return s2 - s1;
+}
+
+// Returns s such that s in [0, max_s_].
+// Typically used after adding some value to s.
+double Map::Normalize(double s) {
+  
+  return fmod (s, max_s_);
+}
+
+int Map::D2Lane (double d) {
+  
+  int lane = std::round ((d - 2.0) / 4.0);
+  
+  return lane;
+}
+
+double Map::Lane2D (int lane) {
+  
+  double d = 4.0*lane + 2.0;
+  
+  return d;
+}
+
+// Returns an index to maps_s where s in [maps_s[i], maps_s[i++]).
+// TODO: delete function? no longer needed?
 int Map::GetStartPoint(double s) {
   
   // use a linear search of maps_s since its pretty small
@@ -109,6 +152,9 @@ int Map::GetStartPoint(double s) {
   return i;
 }
 
+// Returns an index to maps_s where p is in between maps_s[i] and maps_s[i+1].
+// Used in CalcFrenet in finding starting point for interpolating the best
+// s and d values.
 int Map::GetStartPoint(Cartesian p) {
   
   double lowest_d = std::numeric_limits<double>::infinity();
@@ -154,6 +200,9 @@ int Map::GetStartPoint(Cartesian p) {
 Cartesian Map::CalcCartesian(Frenet f) {
   
   Cartesian p;
+  
+  if (f.s >= max_s_)
+    f.s = Normalize(f.s);
   
   p.x = sx_(f.s) + f.d*snx_(f.s);
   p.y = sy_(f.s) + f.d*sny_(f.s);
@@ -204,8 +253,10 @@ Frenet Map::CalcFrenet(Cartesian p) {
   }
   
   Frenet f;
+  
   f.s = s;
-  f.d = (dx - dy) / (snx - sny);
+  //f.s = (s > max_s_) ? Normalize(s) : s;
+  f.d = (dx - dy) / (snx - sny);   // check for zeros?
   
   return f;
 }

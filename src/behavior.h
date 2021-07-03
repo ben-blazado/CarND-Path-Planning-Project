@@ -25,16 +25,22 @@ typedef struct {
 class Behavior {
   
   public:
-    Behavior(Trajectory& trajectory, double max_s, double secs_per_update, 
+    Behavior(Trajectory& trajectory, Map& map, double secs_per_update, 
         double max_secs);
     ~Behavior();
     
+    struct InputData {
+      Kinematic<Frenet> start;
+      int prev_num_waypoints;
+    };
+    void Input(InputData& in);
+    
     void Run();
-    void Receive(Kinematic<Frenet>& start);
       
   private:
   
     Trajectory& trajectory_;
+    Map&        map_;
     
     double max_s_;
     double max_secs_;
@@ -43,20 +49,14 @@ class Behavior {
     bool  processing_;
     thread thread_;
     
-    struct {
-      mutex m;
-      bool updated;
-      Kinematic<Frenet> start;
-    } buf_;
-    bool updated_;
-    Kinematic<Frenet> start_;
+    InputData         in_;
+    Buffer<InputData> in_buf_;
     
     void GeneratePaths();
     Path& SelectBestPath();
     vector<Path> paths_;
     
-    void Update();
-    void ProcessUpdates();
+    void ProcessInputs();
     
     //SelectBestState();
     

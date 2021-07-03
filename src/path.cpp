@@ -16,7 +16,7 @@ double QuinticPosition (double secs, vector<double> coeffs) {
   
   double sum = 0.0;
   for (int i = 0; i < coeffs.size(); i ++) 
-    sum += coeffs[i] + pow(secs, i);
+    sum += (coeffs[i] * pow(secs, i));
     
   return sum;
 }
@@ -49,27 +49,27 @@ vector<double> JMTCoeffs(Kinematic<double> &start, Kinematic<double> &end,
   double t5 = t4*t;
   
   MatrixXd T_mat = MatrixXd(3, 3);
+  VectorXd S_vec = VectorXd(3);
   VectorXd A_vec = VectorXd(3);
   
   T_mat <<   t3,    t4,    t5,
            3*t2,  4*t3,  5*t4,
             6*t, 12*t2, 20*t3;
            
-  A_vec << end.p - (start.p + start.v*t + 0.5*start.a*t2),
+  S_vec << end.p - (start.p + start.v*t + 0.5*start.a*t2),
            end.v - (start.v + start.a*t),
            end.a - start.a;
           
-  A_vec = T_mat.inverse()*A_vec;
+  A_vec = T_mat.inverse()*S_vec;
   
   return {start.p, start.v, start.a/2.0, A_vec[0], A_vec[1], A_vec[2]};
 }
 
-double Path::secs_per_update_ = 0;
-double Path::max_s_ = 0;
+double Path::secs_per_update_;
 
-Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t) {
-  
-  /*
+Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
+    int num_waypoints) {
+  /**/
   vector<double> path_s;
   vector<double> path_d;
   
@@ -77,24 +77,40 @@ Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t) {
   Kinematic<double> end_s   = {end.p.s,   end.v.s,   end.a.s};
   vector<double> s_coeffs = JMTCoeffs(start_s, end_s, t);
   
+  cout << "Path::start v.s " << start.v.s << endl;
+  cout << "Path::end v.s "   << end.v.s << endl;
+  
   Kinematic<double> start_d = {start.p.d, start.v.d, start.a.d};
   Kinematic<double> end_d   = {end.p.d,   end.v.d,   end.a.d};
   vector<double> d_coeffs = JMTCoeffs(start_d, end_d, t);
+
+  cout << "Path::start d " << start.p.d << endl;
+  cout << "Path::end d "   << end.p.d << endl;
   
-  for (double secs = secs_per_update_; secs <= t; secs += secs_per_update_) {
-    double s = fmod (start.p.s + QuinticPosition(secs, s_coeffs), max_s_);
-    double d = start.p.d + QuinticPosition(secs, d_coeffs);
-    waypoints_.push_back({s, d});
+  double secs = 0;
+  for (int i = 1; i <= num_waypoints; i ++) {
+    secs += secs_per_update_;
+    double s = QuinticPosition(secs, s_coeffs); 
+    double d = QuinticPosition(secs, d_coeffs);
+
+    // waypoints will need to be normalized as required during conversion
+    Frenet waypoint = {s, d};
+    waypoints_.push_back(waypoint); 
   }
-  */
+  /**/
+  /*
   Frenet f;
   f.s = start.p.s;
   f.d = start.p.d;
   
   double v = start.v.s;
   double acc = 4.4704;  // m/s2  
-  
-  for (double secs = secs_per_update_; secs <= t; secs += secs_per_update_) {
+  cout << "Path()::start v " << v << endl;
+
+  double secs = 0;
+  for (int i = 1; i <= num_waypoints && secs <= t; i ++) {
+    secs += secs_per_update_;
+  //for (double secs = secs_per_update_; secs <= t; secs += secs_per_update_) {
     
     if (v < 21)      // (49 / 2.237))
       v += acc * secs_per_update_;
@@ -102,19 +118,14 @@ Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t) {
     
     waypoints_.push_back(f);
   } 
+  */
   
-  cout << "Path::Path() " << waypoints_.size() << endl;
+  cout << "Path::Path() created " << waypoints_.size() << endl;
 
   
   return;
 }
 
-Path::~Path() {
-  
-  waypoints_.clear();
-  
-}
-  
 /*
 vector<CostFunction> State::cost_functions_{
     State::SpeedCost, 

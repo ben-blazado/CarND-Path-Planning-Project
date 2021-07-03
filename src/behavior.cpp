@@ -1,24 +1,20 @@
 #include "behavior.h"
 
+#include <cmath>
+
 namespace PathPlanning {
   
 using std::cout;
 using std::endl;
 
-Behavior::Behavior (Trajectory& trajectory, double max_s, 
-    double secs_per_update, double max_secs) : trajectory_(trajectory) {
+Behavior::Behavior (Trajectory& trajectory, Map& map, double secs_per_update, 
+    double max_secs) 
+    : trajectory_(trajectory), map_(map) {
   
-  max_s_       = max_s;
   max_secs_    = max_secs;
-  
+  processing_  = false;
   Path::SecsPerUpdate(secs_per_update);
-  Path::MaxS(max_s);
-  
-  processing_  = false;
-  updated_     = false;
-  buf_.updated = false;
-  processing_  = false;
-  
+
   return;
   
 }
@@ -34,56 +30,96 @@ Behavior::~Behavior() {
 }
 
 
-void Behavior::Receive(Kinematic<Frenet>& start) {
+void Behavior::Input(InputData& in) {
   
-  if (buf_.m.try_lock()) {
-    
-    buf_.start    = start;
-    buf_.updated  = true;
-
-    cout << "Behavior::Update() " << start_.p.s << " " << start_.p.d << endl;
-
-    buf_.m.unlock();
-  }
+  in_buf_.Write(in);
   
   return;
 }
 
-void Behavior::Update() {
+void Behavior::GeneratePaths() {
+
+  paths_.clear();
   
-  buf_.m.lock();
+  Kinematic<Frenet> end;
+  double target_vel;
+  if (in_.start.v.s <= 5)
+    target_vel = 5;
+  else if (in_.start.v.s <= 10)
+    target_vel = 10;
+  else 
+    target_vel = 20;
   
-  if (buf_.updated) {
-    
-    updated_ = true;
-    start_   = buf_.start;
-    
-    buf_.m.unlock();
+  double max_distance = target_vel * max_secs_;
   
-  }
+  // okay if s > max_s because s gets normalized in calc_xy
+  end.p.s = in_.start.p.s + max_distance;
+  // ensures that the end d is in middle of current lane
+  end.p.d = map_.Lane2D(1);
+  //end.p.d = in_.start.p.d;
   
-  buf_.m.unlock();
+  end.v.s = target_vel;
+  end.v.d = 0;
+  
+  end.a.s = 0;
+  end.a.d = 0;
+  
+  double max_waypoints = max_secs_ / 0.02;
+  double num_waypoints = max_waypoints - in_.prev_num_waypoints;
+  
+  Path path(in_.start, end, max_secs_, num_waypoints);
+  
+  paths_.push_back(path);
+  
+
+  /*
+  paths_.clear();
+  
+  Kinematic<Frenet> end;
+  double target_vel = 21; 
+  double max_distance = target_vel * max_secs_;
+  
+  // okay if s > max_s because s gets normalized in calc_xy
+  end.p.s = in_.start.p.s + max_distance;
+  // ensures that the end d is in middle of current lane
+  end.p.d = map_.Lane2D(1);
+  //end.p.d = in_.start.p.d;
+  
+  end.v.s = target_vel;
+  end.v.d = 0;
+  
+  end.a.s = 0;
+  end.a.d = 0;
+  
+  double max_waypoints = max_secs_ / 0.02;
+  double num_waypoints = max_waypoints - in_.prev_num_waypoints;
+  
+  Path path(in_.start, end, max_secs_, num_waypoints);
+  
+  paths_.push_back(path);
+  */
   
   return;
 }
 
-void Behavior::ProcessUpdates () {
+void Behavior::ProcessInputs () {
 
   while (processing_) {
     
-    Update();
-    
-    if (updated_) {
+    if (in_buf_.Read(in_)) {
+      
+      cout << "Behavoir::input s d" << in_.start.p.s << " " << in_.start.p.d << endl;
+      
       GeneratePaths();
       Path& best_path = SelectBestPath();
       
       vector<Frenet> waypoints = best_path.Waypoints();
       cout << "Behavoir::ProcessUpdates() " << waypoints.size() << endl;
-      trajectory_.Receive(waypoints);
       
-      updated_ = false;
+      Trajectory::BehaviorInput beh_in = {in_.start.p, waypoints};
+      trajectory_.Input(beh_in);
     }
-  } // while
+  } 
   
   return;
 }
@@ -92,77 +128,12 @@ void Behavior::ProcessUpdates () {
 void Behavior::Run () {
   
   processing_ = true;
-  thread_     = thread( [this] {ProcessUpdates();} );
+  thread_     = thread( [this] { ProcessInputs(); } );
   
   return;
 }
 
           
-int D2Lane (double d) {
-  
-  int lane = std::round ((d - 2.0) / 4.0);
-  
-  return lane;
-}
-
-double Lane2D (int lane) {
-  
-  double d = 4.0*lane + 2.0;
-  
-  return d;
-}
-          
-void Behavior::GeneratePaths() {
-
-  paths_.clear();
-  
-  Kinematic<Frenet> end;
-  double target_vel = 21.90496; 
-  
-  end.p.s = fmod(start_.p.s + target_vel*max_secs_, max_s_);
-  end.p.d = Lane2D(D2Lane(start_.p.d));
-  
-  end.v.s = target_vel;
-  end.v.d = 0;
-  
-  end.a.s = 0;
-  end.a.d = 0;
-  
-  Path path(start_, end, max_secs_);
-  
-  paths_.push_back(path);
-
-  /*
-  // iterate over lane
-  for (int lane = 0; lane < max_lanes_;l ++) {
-    // max_lane_speed = MaxLaneSpeed(Lane);
-    double max_lane_speed = 45;
-    
-    speed_options[SpeedOption::kMaxLane] = max_lane_speed;
-    
-    // iterate over time (seconds)
-    for (int t = 1; t <= max_secs_; t++)
-      
-      // iterate over speed opions (stop, maintain, max lane)
-      for (int v = 0; v < speed_options.size(); v++) {
-        double speed = speed_options[v]; 
-
-        FrenetKinematic end;
-        
-        end.s.p = start_.s.p + speed*t
-        end.s.v = speed;
-        end.s.a = 0;
-        
-        end.d.p = LaneToD(lane);
-        end.d.v = 0;
-        end.d.a = 0;
-        
-        states_[lane][t][v].end(end);
-      }
-  }
-  return;
-  */
-}
         
 
 Path& Behavior::SelectBestPath() {

@@ -3,8 +3,7 @@
 
 #include "spline.h"
 
-namespace PathPlanning 
-{
+namespace PathPlanning {
   
 using std::vector;
 using tk::spline;
@@ -53,12 +52,20 @@ class Map {
   
     Map (vector<double>& maps_s, vector<double>& maps_x, vector<double>& maps_y, 
         vector<double>& maps_nx, vector<double>& maps_ny, double max_s);
-
+    
     Cartesian CalcCartesian (Frenet f);
     Frenet    CalcFrenet    (Cartesian p);
+    
+    double Add(double s, double ds);
+    double Diff(double s2, double s1);
+    double Normalize(double s);
+    
+    double Lane2D(int lane);
+    int D2Lane(double d);
         
   private:
   
+
     int GetStartPoint(double s);
     int GetStartPoint(Cartesian p);
 

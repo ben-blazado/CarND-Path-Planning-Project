@@ -68,8 +68,8 @@ int main() {
   Map          map(map_waypoints_s, map_waypoints_x, map_waypoints_y,
                    map_waypoints_dx, map_waypoints_dy, max_s);
   Trajectory   trajectory(map);
-  Behavior     behavior(trajectory, max_s, secs_per_update, max_secs);
-  Localization localization(behavior,trajectory, map, max_s, secs_per_update);
+  Behavior     behavior(trajectory, map, secs_per_update, max_secs);
+  Localization localization(behavior,trajectory, map, secs_per_update);
     
   localization.Run();
   behavior.Run();
@@ -125,11 +125,26 @@ int main() {
            *   sequentially every .02 seconds
            */
            
-          localization.Receive(car_x, car_y, car_yaw, car_speed, 
-            previous_path_x, previous_path_y);
+          Localization::InputData loc_in = {car_x, car_y, car_yaw, car_speed, 
+              previous_path_x, previous_path_y};
+          localization.Input(loc_in);
             
-          //std::cout << "GetXYVals" << std::endl;
-          trajectory.GetNextXYVals(next_x_vals, next_y_vals);
+          Trajectory::OutputData tra_out;
+          trajectory.Output(tra_out);
+          next_x_vals = tra_out.next_x_vals;
+          next_y_vals = tra_out.next_y_vals;
+          
+          if ((next_x_vals.size() == 0) and (previous_path_x.size() > 0)) {
+            std::cout << "**** next x vals size 0 when prev path > 0 !!!!! *****" << next_x_vals.size() << std::endl;
+            for (int i = 0; i < previous_path_x.size(); i ++) {
+              next_x_vals.push_back(previous_path_x[i]);
+              next_y_vals.push_back(previous_path_y[i]);
+            }
+          }
+          else
+            std::cout << "**** next_x vals usable !!!!! *****" << next_x_vals.size() << std::endl;            
+            
+          std::cout << "GetXYVals::next_x_vals size " << next_x_vals.size() << std::endl;
           
           /*
           FrenetP f;
