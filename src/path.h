@@ -9,13 +9,14 @@ namespace PathPlanning {
 using std::vector;
   
 class Path {
+  
+  friend class Behavior;
 
   public:
   
     Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
         int num_waypoints);
     static void SecsPerUpdate(double secs) { secs_per_update_ = secs; }
-    static void MaxS(double max_s)         { max_s_           = max_s; }
     
     const vector<Frenet>& Waypoints() { return waypoints_; }
     
@@ -24,7 +25,9 @@ class Path {
     //void         GetXYVals(vector<double>& x_vals, vector<double>& y_vals);
   private:
     static double secs_per_update_; 
-    static double max_s_;
+    Frenet max_d_;
+    Frenet max_v_;
+    Frenet max_a_;
 
     vector<Frenet> waypoints_;
     

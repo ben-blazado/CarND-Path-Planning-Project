@@ -63,7 +63,7 @@ void Trajectory::ProcessInputs () {
         next_y_vals = loc_in_.prev_path_y;
       }
       
-      if (beh_in_.start.s == loc_in_.last_f.s) {
+      if (beh_in_.start.s() == loc_in_.last_f.s()) {
         cout << "Trajectory::ProcessUpdates::waypoints size from beh " << beh_in_.waypoints.size() << endl;
         // add waypoints from best path
         for (int i = 0; i < beh_in_.waypoints.size(); i ++) {
@@ -102,11 +102,11 @@ void Trajectory::Run () {
 }
 
 
-void Trajectory::Output(OutputData& out) {
+bool Trajectory::Output(OutputData& out) {
 
-  out_buf_.Read(out);
+  bool successful = out_buf_.Read(out);
   
-  return;
+  return successful;
   
 }
 

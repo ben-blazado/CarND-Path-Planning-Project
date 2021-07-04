@@ -8,7 +8,7 @@
 #include "helpers.h"
 #include "behavior.h"
 #include "map.h"
-#include "buffer.h"
+#include "buffer.hpp"
 
 namespace PathPlanning {
 

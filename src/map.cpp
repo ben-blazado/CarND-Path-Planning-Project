@@ -5,9 +5,85 @@
 
 namespace PathPlanning {
   
-  using std::cout;
-  using std::endl;
+using std::cout;
+using std::endl;
   
+double Frenet::max_s_;
+double Frenet::half_max_s_;
+
+Frenet::Frenet() {
+
+  return;
+}
+
+
+Frenet::Frenet(double s, double d) {
+
+  if (s >=  max_s_)
+    s_ = fmod(s, max_s_);
+  else
+    s_ = s;
+  d_ = d;
+  
+  return;
+}
+
+Frenet Frenet::operator =(Frenet f) {
+  
+  if (f.s_ >=  max_s_)
+    s_ = fmod(f.s_, max_s_);
+  else
+    s_ = f.s_;
+  
+  d_ = f.d_;
+  
+  return *this;
+}
+
+Frenet Frenet::operator +(Frenet f) {
+  Frenet sum;
+  
+  sum.s_ = s_ + f.s_;
+  if (sum.s_ >= max_s_)
+    sum.s_ = fmod (sum.s_, max_s_);
+  
+  sum.d_ = d_ + f.d_;
+  
+  return sum;
+}
+
+
+// Gets shorter distance on the s-axis between this and  f 
+// since the x axis wraps around at max_s.
+Frenet Frenet::operator -(Frenet f) {
+  Frenet diff;
+  
+  diff.s_ = s_ - f.s_;
+  // get shorter distance if the difference is greater than half of the max s.
+  if (fabs(diff.s_) > half_max_s_)
+    if (s_ < f.s_)
+      diff.s_ = (s_ + max_s_) - f.s_;
+    else
+      diff.s_ = s_ - (f.s_ + max_s_);
+  diff.d_ = d_ - f.d_;
+  return diff;
+}
+
+Frenet Frenet::operator /(double divisor) {
+  Frenet q;
+  q.s_ = s_ / divisor;
+  q.d_ = d_ / divisor;
+  return q;
+}
+
+void Frenet::Max(Frenet f) {
+  if (f.s_ > s_)
+    s_ = f.s_;
+  if (f.d_ > d_)
+    d_ = f.d_;
+  return;
+}
+
 Origin::Origin (double x, double y, double rotation) {
   
   x_ = x;
@@ -99,6 +175,9 @@ Map::Map(vector<double>& maps_s,
   sny_ = spline(maps_s_, maps_ny_);
   
   max_s_ = max_s;
+  
+  Frenet::max_s_ = max_s;
+  Frenet::half_max_s_ = max_s/2;
   
   return;
 }
@@ -201,11 +280,13 @@ Cartesian Map::CalcCartesian(Frenet f) {
   
   Cartesian p;
   
-  if (f.s >= max_s_)
-    f.s = Normalize(f.s);
+  if (f.s_ >= max_s_) {
+    cout << "*** f.s is greater than max_s. exiting... ***" << endl;
+    exit(1);
+  }
   
-  p.x = sx_(f.s) + f.d*snx_(f.s);
-  p.y = sy_(f.s) + f.d*sny_(f.s);
+  p.x = sx_(f.s_) + f.d_*snx_(f.s_);
+  p.y = sy_(f.s_) + f.d_*sny_(f.s_);
   
   return p;
 }
@@ -254,9 +335,9 @@ Frenet Map::CalcFrenet(Cartesian p) {
   
   Frenet f;
   
-  f.s = s;
+  f.s_ = s;
   //f.s = (s > max_s_) ? Normalize(s) : s;
-  f.d = (dx - dy) / (snx - sny);   // check for zeros?
+  f.d_ = (dx - dy) / (snx - sny);   // check for zeros?
   
   return f;
 }

@@ -69,34 +69,69 @@ double Path::secs_per_update_;
 
 Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
     int num_waypoints) {
-  /**/
-  vector<double> path_s;
-  vector<double> path_d;
-  
-  Kinematic<double> start_s = {start.p.s, start.v.s, start.a.s};
-  Kinematic<double> end_s   = {end.p.s,   end.v.s,   end.a.s};
+      
+  Kinematic<double> start_s = {start.p.s(), start.v.s(), start.a.s()};
+  Kinematic<double> end_s   = {end.p.s(),   end.v.s(),   end.a.s()};
   vector<double> s_coeffs = JMTCoeffs(start_s, end_s, t);
   
-  cout << "Path::start v.s " << start.v.s << endl;
-  cout << "Path::end v.s "   << end.v.s << endl;
-  
-  Kinematic<double> start_d = {start.p.d, start.v.d, start.a.d};
-  Kinematic<double> end_d   = {end.p.d,   end.v.d,   end.a.d};
+  Kinematic<double> start_d = {start.p.d(), start.v.d(), start.a.d()};
+  Kinematic<double> end_d   = {end.p.d(),   end.v.d(),   end.a.d()};
   vector<double> d_coeffs = JMTCoeffs(start_d, end_d, t);
 
-  cout << "Path::start d " << start.p.d << endl;
-  cout << "Path::end d "   << end.p.d << endl;
+  max_a_ = {0, 0};
+  max_v_ = {0, 0};
+  max_d_ = {0, 0};
   
   double secs = 0;
-  for (int i = 1; i <= num_waypoints; i ++) {
+  static Frenet prev_v(0.0, 0.0);
+  for (int i = 0; i < num_waypoints; i ++) {
+
     secs += secs_per_update_;
     double s = QuinticPosition(secs, s_coeffs); 
     double d = QuinticPosition(secs, d_coeffs);
 
-    // waypoints will need to be normalized as required during conversion
+    // waypoints will need to be normalized 
+    // before conversion to xy coordinates
     Frenet waypoint = {s, d};
     waypoints_.push_back(waypoint); 
+
+    if (i > 0) {
+
+      Frenet wp2 = waypoints_[i];
+      Frenet wp1 = waypoints_[i-1];
+
+      Frenet curr_v = (wp2 - wp1) / secs_per_update_;
+      max_v_.Max(curr_v);
+
+      Frenet curr_a = (curr_v - prev_v) / secs_per_update_;
+      max_a_.Max(curr_a);
+      
+      prev_v = curr_v;
+    }
+    
   }
+  
+  if (waypoints_.size() > 0) {
+    max_d_ = waypoints_.back() - waypoints_.front();
+    cout << "Path::Path() max_d " << max_d_.s() << endl;
+  }
+  
+  cout << "Path::Path() created " << waypoints_.size() << endl;
+
+  //if (max_v_.s() >= 22.352) {
+  //  cout << "max v exceeded " << max_v_.s() << endl;
+  // exit(0);
+  // }
+
+  
+  return;
+}
+ 
+} // namespace
+
+
+
+
   /**/
   /*
   Frenet f;
@@ -119,12 +154,7 @@ Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
     waypoints_.push_back(f);
   } 
   */
-  
-  cout << "Path::Path() created " << waypoints_.size() << endl;
 
-  
-  return;
-}
 
 /*
 vector<CostFunction> State::cost_functions_{
@@ -253,5 +283,3 @@ void ConstantV::Plan () {
 }
 
 */
-
-} // namespace

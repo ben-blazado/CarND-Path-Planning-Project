@@ -130,57 +130,18 @@ int main() {
           localization.Input(loc_in);
             
           Trajectory::OutputData tra_out;
-          trajectory.Output(tra_out);
-          next_x_vals = tra_out.next_x_vals;
-          next_y_vals = tra_out.next_y_vals;
-          
-          if ((next_x_vals.size() == 0) and (previous_path_x.size() > 0)) {
-            std::cout << "**** next x vals size 0 when prev path > 0 !!!!! *****" << next_x_vals.size() << std::endl;
-            for (int i = 0; i < previous_path_x.size(); i ++) {
-              next_x_vals.push_back(previous_path_x[i]);
-              next_y_vals.push_back(previous_path_y[i]);
-            }
+          if (trajectory.Output(tra_out)) {
+            next_x_vals = tra_out.next_x_vals;
+            next_y_vals = tra_out.next_y_vals;
           }
-          else
-            std::cout << "**** next_x vals usable !!!!! *****" << next_x_vals.size() << std::endl;            
+          else {
+            // see link below for nlohmann::json assignment
+            // https://github.com/nlohmann/json/issues/896#issuecomment-354319841
+            next_x_vals = previous_path_x.get<vector<double>>(); 
+            next_y_vals = previous_path_y.get<vector<double>>();
+          }
             
           std::cout << "GetXYVals::next_x_vals size " << next_x_vals.size() << std::endl;
-          
-          /*
-          FrenetP f;
-          int path_remaining =  previous_path_x.size();
-          double acc = 4.4704;  // m/s2
-          
-          if (path_remaining > 0) {
-            
-            double end_x = previous_path_x.back();
-            double end_y = previous_path_y.back();
-            f = localization.CalcSD ({end_x, end_y});
-            
-            next_x_vals.insert(next_x_vals.end(), 
-                previous_path_x.begin(), previous_path_x.end());
-            next_y_vals.insert(next_y_vals.end(), 
-                previous_path_y.begin(), previous_path_y.end());
-                
-          }
-          else 
-            f = localization.CalcSD({car_x, car_y});          
-          
-          for (int i = 0; i < 50 - path_remaining; i ++) {
-            
-            if (vel < 21)      // (49 / 2.237))
-              vel += acc * 0.02;
-            f.s += vel * 0.02;
-            CartP p = localization.CalcXY(f);
-            
-            next_x_vals.push_back(p.x);
-            next_y_vals.push_back(p.y);
-          } 
-          
-          loop_num ++;
-          //if (loop_num == 3)
-          //  exit(0);
-          */
           
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;

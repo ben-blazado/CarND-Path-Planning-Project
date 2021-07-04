@@ -3,7 +3,7 @@
 
 #include "map.h"
 #include "path.h"
-#include "buffer.h"
+#include "buffer.hpp"
 
 #include <thread>
 #include <mutex>
@@ -36,7 +36,7 @@ class Trajectory {
     void Input(BehaviorInput& beh_in);
     void Input(LocalizationInput& loc_in);
     void Run();
-    void Output(OutputData& out);
+    bool Output(OutputData& out);
   
   private:
 

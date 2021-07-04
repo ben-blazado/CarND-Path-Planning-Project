@@ -17,9 +17,33 @@ struct Kinematic{
   T a;
 };
 
-struct Frenet{
-  double s;
-  double d;
+
+class Frenet{
+  
+  friend class Map;
+  
+  public:
+  
+    Frenet();
+    Frenet(double s, double d);
+
+    double s() { return s_; };
+    double d() { return d_; };
+  
+    Frenet operator =(Frenet f);
+    Frenet operator +(Frenet f);
+    Frenet operator -(Frenet f);
+    Frenet operator /(double divisor);
+    void Max(Frenet f);
+  
+  protected:
+  
+    double s_;
+    double d_;
+  
+    // initialized by Map
+    static double max_s_;  
+    static double half_max_s_;
 };
 
 
@@ -85,8 +109,6 @@ class Map {
   
 };
 
- 
-  
 } // namespace
 
 #endif // MAP_H

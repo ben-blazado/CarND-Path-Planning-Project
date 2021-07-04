@@ -91,7 +91,7 @@ Frenet Localization::CalcLastPos() {
   // covert last waypoint from cartesian point to frenet
   Frenet last_f = map_.CalcFrenet(last_p);
   
-  cout << "Localization::last_f " << last_f.s << " " << last_f.d << endl;
+  cout << "Localization::last_f " << last_f.s() << " " << last_f.d() << endl;
   
   return last_f;
 }
@@ -116,13 +116,15 @@ Frenet Localization::CalcLastVel(Frenet last_f) {
   // Calculate ds and dd for use in calculating velocity.
   // double ds = map_.Diff (last_f.s, prev_last_f.s);
   // TODO: check below for accurate difference
-  double ds = last_f.s - prev_last_f.s;
-  double dd = last_f.d - prev_last_f.d;
+  //double ds = last_f.s - prev_last_f.s;
+  //double dd = last_f.d - prev_last_f.d;
+  Frenet df = last_f - prev_last_f;
   
   // Calculate velocity components using ds, dd, and dt.
-  Frenet last_v;
-  last_v.s = ds / dt_;  // dt_ is num secs per update (normally 0.02).
-  last_v.d = dd / dt_;
+  //Frenet last_v;
+  //last_v.s = ds / dt_;  // dt_ is num secs per update (normally 0.02).
+  //last_v.d = dd / dt_;
+  Frenet last_v = df / dt_;
   
   return last_v;
 }
@@ -144,17 +146,19 @@ Frenet Localization::CalcLastAcc(Frenet last_v) {
   
   // Calculate initial velocity along s and d 
   // based on first and second  waypoints.
-  double first_vs = map_.Diff(second_f.s, first_f.s) / dt_;
-  double first_vd = (second_f.d - first_f.d) / dt_;
+  //double first_vs = map_.Diff(second_f.s, first_f.s) / dt_;
+  //double first_vd = (second_f.d - first_f.d) / dt_;
+  Frenet first_v = (second_f - first_f) / dt_;
   
   // Calculate time over first and last velocities (entire path remaining).
   int num_waypoints = in_.prev_path_x.size();
   double dt_acc = num_waypoints*dt_;
   
   // Calculate the acc along s and d using a=dv/dt.
-  Frenet acc;
-  acc.s = (last_v.s - first_vs) / dt_acc;
-  acc.d = (last_v.d - first_vd) / dt_acc;
+  Frenet acc = (last_v - first_v) / dt_acc;
+  //acc.s = (last_v.s - first_vs) / dt_acc;
+  //acc.d = (last_v.d - first_vd) / dt_acc;
+  
   
   return acc;
 }
@@ -174,11 +178,15 @@ void Localization::ProcessInputs () {
       
       Kinematic<Frenet> last_f;  // last point in frenet from previous path
       last_f.p = CalcLastPos();
+      
+      Trajectory::LocalizationInput tra_in = {last_f.p, in_.prev_path_x, in_.prev_path_y};
+      trajectory_.Input(tra_in);
+      
       last_f.v = CalcLastVel(last_f.p);
       last_f.a = CalcLastAcc(last_f.v);
       
-      cout << "Localization::Last s d for input to beh " << last_f.p.s << endl;
-      cout << "Localization::Last v for input to beh " << last_f.v.s  << endl;
+      cout << "Localization::Last s d for input to beh " << last_f.p.s() << endl;
+      cout << "Localization::Last v for input to beh " << last_f.v.s()  << endl;
       // use prev_f as starting point for behavior module
       
       // Pass frenet kinematics of last waypoint
@@ -188,9 +196,6 @@ void Localization::ProcessInputs () {
       
       Behavior::InputData beh_in = {last_f, num_waypoints};
       behavior_.Input(beh_in);
-      
-      Trajectory::LocalizationInput tra_in = {last_f.p, in_.prev_path_x, in_.prev_path_y};
-      trajectory_.Input(tra_in);
     }
   }  // while
 }

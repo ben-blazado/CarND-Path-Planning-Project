@@ -4,6 +4,7 @@
 #include "helpers.h"
 #include "path.h"
 #include "trajectory.h"
+#include "buffer.hpp"
 
 #include <thread>
 #include <mutex>
