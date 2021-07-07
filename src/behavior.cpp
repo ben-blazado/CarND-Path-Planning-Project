@@ -11,8 +11,10 @@ Behavior::Behavior (Trajectory& trajectory, Map& map, double secs_per_update,
     double max_secs) 
     : trajectory_(trajectory), map_(map) {
   
-  max_secs_    = max_secs;
-  processing_  = false;
+  max_secs_      = max_secs;
+  processing_    = false;
+  max_waypoints_ = max_secs / secs_per_update;
+  
   Path::SecsPerUpdate(secs_per_update);
 
   return;
@@ -39,37 +41,87 @@ void Behavior::Input(InputData& in) {
 
 void Behavior::GeneratePaths() {
 
-  paths_.clear();
-  
+  const double      max_v_s = 22.352;
   Kinematic<Frenet> end;
-  int lane = 1;
-  for (double v_s = 0.0; v_s <= 22.5; v_s += 2.5) {
+
+  paths_.clear();
+  Path::ResetStats();
+  int    lane = 1;
+  double num_waypoints = max_waypoints_ - in_.prev_num_waypoints;
+  double v_s = in_.start.v.s();
+  
+  cout << "*** start v " << v_s << endl;
+  if (num_waypoints <= 0) {
+    cout << "error " << endl;
+    exit(0);
+  }
+  //double t = num_waypoints*Path::secs_per_update_;
+  double t = max_secs_;
+
+  for (double a = -10; a <=10 ; a += 0.5) {
     
-    double d_s = v_s * max_secs_; 
+    double end_v_s = v_s + a*t;
+    if (end_v_s < 0)
+      continue;
+    
+    double ds = v_s*t + 0.5*a*t*t; 
     
     // okay if s > max_s because s gets normalized in calc_xy
     // ensures that the end d is in middle of current lane
-    end.p = {in_.start.p.s() + d_s, map_.Lane2D(lane)};
+    end.p = {in_.start.p.s() + ds, map_.Lane2D(lane)};
     //end.p.d = in_.start.p.d;
     
-    end.v = {v_s, 0};
+    end.v = {end_v_s, 0};
     
-    end.a = {0, 0};
+    end.a = {a, 0};
     
-    double max_waypoints = max_secs_ / 0.02;
-    double num_waypoints = max_waypoints - in_.prev_num_waypoints;
-    
-    Path path(in_.start, end, max_secs_, num_waypoints);
-    cout << "path max_d_ " << path.max_d_.s() << endl;
+    // Path path(in_.start, end, t, num_waypoints);
+    Path path(in_.start, end, t, max_waypoints_);
+    cout << "path ds_ " << path.ds_ << endl;
+    cout << "end_v_s " << end_v_s << endl;
     
     paths_.push_back(path);
   }
   
   cout << "num_paths " << paths_.size() << endl;
   
-  
   return;
 }
+
+Path& Behavior::SelectBestPath() {
+  
+  const double target_v_s = 21.00;
+  int best=0;
+  double max_a = 0;
+  double max_d = 0;
+  double best_v = 0;
+  double lowest_dv = 9999;
+  
+  for (int i = 0; i < paths_.size(); i ++) {
+    
+    // paths_[i].CalcCost();
+    
+    // cout << "selectBestPath " << paths_[i].max_d_.s() << endl;
+    double path_last_v = paths_[i].last_v_s_;
+    double dv = fabs(path_last_v - target_v_s);
+    if (dv < lowest_dv) {
+      lowest_dv = dv;
+      best = i;
+      cout << "best path [" << best << "] last vs " << path_last_v << endl;
+    }
+    /*
+    if ((paths_[i].max_a_.s() < 8) and (max_a < paths_[i].max_a_.s())) {
+      max_a = paths_[i].max_a_.s();
+      best = i;
+      cout << "best path [" << best << "] " << max_a << endl;
+    }
+    */
+  }
+  
+  return paths_[best];
+}
+  
+
   
 
   /*
@@ -108,9 +160,10 @@ void Behavior::ProcessInputs () {
       cout << "Behavoir::input s d" << in_.start.p.s() << " " << in_.start.p.d() << endl;
       
       GeneratePaths();
+
       Path& best_path = SelectBestPath();
-      
-      vector<Frenet> waypoints = best_path.Waypoints();
+      vector<Frenet> waypoints = best_path.waypoints_;
+
       cout << "Behavoir::ProcessUpdates() " << waypoints.size() << endl;
       
       Trajectory::BehaviorInput beh_in = {in_.start.p, waypoints};
@@ -133,33 +186,6 @@ void Behavior::Run () {
           
         
 
-Path& Behavior::SelectBestPath() {
-  
-  int best=0;
-  double max_a = 0;
-  double max_d = 0;
-  
-  for (int i = 0; i < paths_.size(); i ++) {
-    
-    /*
-    cout << "selectBestPath " << paths_[i].max_d_.s() << endl;
-    if (paths_[i].max_d_.s() > max_d) {
-      max_d = paths_[i].max_d_.s();
-      best = i;
-      cout << "best path [" << best << "] best width " << max_d << endl;
-    }
-    */
-    
-    if ((paths_[i].max_a_.s() < 8) and (max_a < paths_[i].max_a_.s())) {
-      max_a = paths_[i].max_a_.s();
-      best = i;
-      cout << "best path [" << best << "] " << max_a << endl;
-    }
-  }
-  
-  return paths_[8];
-}
-  
   
   /*
   State::start(start_);

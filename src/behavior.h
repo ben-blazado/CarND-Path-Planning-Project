@@ -43,8 +43,8 @@ class Behavior {
     Trajectory& trajectory_;
     Map&        map_;
     
-    double max_s_;
     double max_secs_;
+    double max_waypoints_;
   
     mutex mutex_;
     bool  processing_;

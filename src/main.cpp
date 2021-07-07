@@ -69,9 +69,11 @@ int main() {
                    map_waypoints_dx, map_waypoints_dy, max_s);
   Trajectory   trajectory(map);
   Behavior     behavior(trajectory, map, secs_per_update, max_secs);
+  //Prediction   prediction(behavior, map, secs_per_update, max_secs);
   Localization localization(behavior,trajectory, map, secs_per_update);
     
   localization.Run();
+  //prediction.Run();
   behavior.Run();
   trajectory.Run();
   
@@ -128,6 +130,9 @@ int main() {
           Localization::InputData loc_in = {car_x, car_y, car_yaw, car_speed, 
               previous_path_x, previous_path_y};
           localization.Input(loc_in);
+          
+          // Prediction::InputData pre_in = {sensor_fusion};
+          // prediction.Input(pre_in);
             
           Trajectory::OutputData tra_out;
           if (trajectory.Output(tra_out)) {
@@ -139,6 +144,8 @@ int main() {
             // https://github.com/nlohmann/json/issues/896#issuecomment-354319841
             next_x_vals = previous_path_x.get<vector<double>>(); 
             next_y_vals = previous_path_y.get<vector<double>>();
+            std::cout << "Should not happen. " << std::endl;
+            exit(0);
           }
             
           std::cout << "GetXYVals::next_x_vals size " << next_x_vals.size() << std::endl;

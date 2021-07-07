@@ -25,11 +25,23 @@ class Path {
     //void         GetXYVals(vector<double>& x_vals, vector<double>& y_vals);
   private:
     static double secs_per_update_; 
-    Frenet max_d_;
-    Frenet max_v_;
-    Frenet max_a_;
-
+    static double max_dd_;
+    static double max_ds_;
+    static double max_avg_v_s_;
+    static double max_last_v_s_;
+    
+    static void ResetStats();
+    static double DistanceScore (Path& path);
+    static double LaneKeepingScore(Path& path);
+    static double AverageVeloctityScore(Path &path); 
+    static double LastVelocity(Path &path);
+    
     vector<Frenet> waypoints_;
+    
+    double dd_;
+    double ds_;
+    double avg_v_s_;
+    double last_v_s_;
     
     //typedef int    (*CostFunction)(State& state);  
     //static         vector<CostFunction> cost_functions_;

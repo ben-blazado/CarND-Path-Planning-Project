@@ -66,6 +66,21 @@ vector<double> JMTCoeffs(Kinematic<double> &start, Kinematic<double> &end,
 }
 
 double Path::secs_per_update_;
+double Path::max_dd_;
+double Path::max_ds_;
+double Path::max_avg_v_s_;
+double Path::max_last_v_s_;
+
+void Path::ResetStats() {
+  
+  double secs_per_update_ = 0;
+  double max_dd_ = 0;
+  double max_ds_ = 0;
+  double max_avg_v_s_ = 0;
+  double max_last_v_s_ = 0;
+  
+  return;
+}
 
 Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
     int num_waypoints) {
@@ -78,53 +93,91 @@ Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
   Kinematic<double> end_d   = {end.p.d(),   end.v.d(),   end.a.d()};
   vector<double> d_coeffs = JMTCoeffs(start_d, end_d, t);
 
-  max_a_ = {0, 0};
-  max_v_ = {0, 0};
-  max_d_ = {0, 0};
-  
+  ds_       = 0;
+  dd_       = 0;
+  avg_v_s_  = 0;
+  last_v_s_ = 0;
+
+  double tot_v_s = 0;
   double secs = 0;
-  static Frenet prev_v(0.0, 0.0);
+  
+  // use starting position as first position of waypoint
+  waypoints_.push_back(start.p);
+  
   for (int i = 0; i < num_waypoints; i ++) {
 
+    // calulate next waypoint {s, d}
     secs += secs_per_update_;
     double s = QuinticPosition(secs, s_coeffs); 
     double d = QuinticPosition(secs, d_coeffs);
 
-    // waypoints will need to be normalized 
-    // before conversion to xy coordinates
+    // waypoints should automatically be normalized between [0, max_s_);
+    // see class def of Frenet.
     Frenet waypoint = {s, d};
     waypoints_.push_back(waypoint); 
 
-    if (i > 0) {
-
-      Frenet wp2 = waypoints_[i];
-      Frenet wp1 = waypoints_[i-1];
-
-      Frenet curr_v = (wp2 - wp1) / secs_per_update_;
-      max_v_.Max(curr_v);
-
-      Frenet curr_a = (curr_v - prev_v) / secs_per_update_;
-      max_a_.Max(curr_a);
-      
-      prev_v = curr_v;
-    }
+    // generate stats on path
+    Frenet wp2 = waypoints_[i];
+    Frenet wp1 = waypoints_[i-1];
     
+    // accumulate shift along d-axis
+    dd_ += fabs(wp2.d() - wp1.d());
+    if (dd_ > Path::max_dd_)
+      Path::max_dd_ = dd_;
+    
+    // acculate total velocity along s axis for averaging
+    tot_v_s += ((wp2.s() - wp1.s()) /  secs_per_update_);
   }
   
-  if (waypoints_.size() > 0) {
-    max_d_ = waypoints_.back() - waypoints_.front();
-    cout << "Path::Path() max_d " << max_d_.s() << endl;
-  }
+  // calculate remaining stats
+  int last = waypoints_.size() - 1;
   
+  // calculate total longitudinal distance
+  ds_ += waypoints_[last].s() - waypoints_[0].s();
+  if (Path::max_ds_ < ds_)
+    Path::max_ds_ = ds_;
+  
+  // calculate average 
+  avg_v_s_ = tot_v_s / (waypoints_.size() - 1);
+  if (Path::max_avg_v_s_ < avg_v_s_)
+    Path::max_avg_v_s_ = avg_v_s_;
+  
+  last_v_s_ = (waypoints_[last].s() - waypoints_[last - 1].s()) / secs_per_update_;
+  if (Path::max_last_v_s_ < last_v_s_)
+    Path::max_last_v_s_ = last_v_s_;
+
   cout << "Path::Path() created " << waypoints_.size() << endl;
 
   //if (max_v_.s() >= 22.352) {
   //  cout << "max v exceeded " << max_v_.s() << endl;
   // exit(0);
   // }
-
   
   return;
+}
+ 
+double Path::DistanceScore (Path& path) {
+  
+  return path.ds_ / Path::max_ds_;
+  
+}
+
+double Path::LaneKeepingScore(Path& path) {
+  
+  return fabs (Path::max_dd_ - path.dd_) / Path::max_dd_;
+  
+}
+
+double Path::AverageVeloctityScore(Path &path) {
+  
+  return (path.avg_v_s_ / Path::max_avg_v_s_);
+  
+}
+  
+double Path::LastVelocity(Path &path) {
+  
+  return path.last_v_s_ / Path::max_last_v_s_;
+  
 }
  
 } // namespace

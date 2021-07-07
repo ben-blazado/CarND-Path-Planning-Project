@@ -21,7 +21,7 @@ class Trajectory {
     ~Trajectory();
     
     struct BehaviorInput {
-      Frenet         start;
+      Frenet start;
       vector<Frenet> waypoints;
     };
     struct LocalizationInput {
@@ -32,6 +32,8 @@ class Trajectory {
     struct OutputData {
       vector<double> next_x_vals;
       vector<double> next_y_vals;
+      bool linked;
+      vector<Frenet> waypoints;
     };
     void Input(BehaviorInput& beh_in);
     void Input(LocalizationInput& loc_in);

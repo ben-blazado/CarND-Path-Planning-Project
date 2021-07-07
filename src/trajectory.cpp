@@ -52,7 +52,7 @@ void Trajectory::ProcessInputs () {
 
     bool loc_in_ready = loc_in_buf_.Read(loc_in_);
     bool beh_in_ready = beh_in_buf_.TryRead(beh_in_);
-      
+    
     if (loc_in_ready) {
       
       cout << "Trajectory::ProcessUpdates::prev path_x size from loc " << loc_in_.prev_path_x.size() << endl;;
@@ -63,19 +63,27 @@ void Trajectory::ProcessInputs () {
         next_y_vals = loc_in_.prev_path_y;
       }
       
-      if (beh_in_.start.s() == loc_in_.last_f.s()) {
-        cout << "Trajectory::ProcessUpdates::waypoints size from beh " << beh_in_.waypoints.size() << endl;
-        // add waypoints from best path
-        for (int i = 0; i < beh_in_.waypoints.size(); i ++) {
-          Cartesian p = map_.CalcCartesian(beh_in_.waypoints[i]);
-          next_x_vals.push_back(p.x);
-          next_y_vals.push_back(p.y);
-        } 
-      }
-      else
-        cout << "******* next vals last and waypoints start DO NOT MATCH *********" << endl;
-      
-      OutputData out = {next_x_vals, next_y_vals};
+      /*
+      if (beh_in_.waypoints.size() > 0)
+        if (beh_in_.waypoints[0].s() == loc_in_.last_f.s()) {
+          cout << "Trajectory::ProcessUpdates::waypoints size from beh " << beh_in_.waypoints.size() << endl;
+          // add waypoints from best path;
+          // start from waypoint 1 to attach since waypoint 0 
+          // is the same as start of last waypoint of prev path
+          double max_waypoints = 1.0 / 0.02;
+          double num_waypoints = max_waypoints - next_x_vals.size();        
+          if (num_waypoints > 0)
+            for (int i = 1; i < num_waypoints; i ++) {
+              Cartesian p = map_.CalcCartesian(beh_in_.waypoints[i]);
+              next_x_vals.push_back(p.x);
+              next_y_vals.push_back(p.y);
+            } 
+        }
+        else
+          cout << "******* next vals last and waypoints start DO NOT MATCH *********" << endl;
+      */
+      bool linked = (beh_in_.start.s() == loc_in_.last_f.s());
+      OutputData out = {next_x_vals, next_y_vals, linked, beh_in_.waypoints};
       out_buf_.Write(out);
       cout << "Trajectory::next_x_vals_ " << next_x_vals.size() << endl;
       
@@ -104,7 +112,19 @@ void Trajectory::Run () {
 
 bool Trajectory::Output(OutputData& out) {
 
-  bool successful = out_buf_.Read(out);
+  bool successful = out_buf_.ReadDirty(out);
+  
+  if ((out.waypoints.size() > 0) && (out.linked)) {
+    double max_waypoints = 0.8 / 0.02;
+    double num_waypoints = max_waypoints - out.next_x_vals.size();        
+    cout << "Trajectory::Output num waypoints " << num_waypoints << endl;
+    if (num_waypoints > 0)
+      for (int i = 1; i < num_waypoints; i ++) {
+        Cartesian p = map_.CalcCartesian(out.waypoints[i]);
+        out.next_x_vals.push_back(p.x);
+        out.next_y_vals.push_back(p.y);
+      }
+  }
   
   return successful;
   

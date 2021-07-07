@@ -18,6 +18,7 @@ class Buffer {
     bool Write(T& d);
     bool TryRead(T& d);
     bool Read(T& d);    
+    bool ReadDirty(T& d);    
     
   private:
   
@@ -95,6 +96,24 @@ bool Buffer<T>::Read(T& d) {
   
   return successful;
 }
+
+template <typename T>
+bool Buffer<T>::ReadDirty(T& d) {
+  
+  bool successful;
+  unique_lock<mutex> l(m_, defer_lock);
+  
+  l.lock();
+
+  d = data_;
+  updated_ = false;
+  successful  = true;
+
+  l.unlock();
+  
+  return successful;
+}
+
 
 
 }
