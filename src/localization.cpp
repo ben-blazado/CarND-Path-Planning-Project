@@ -66,8 +66,8 @@ void Localization::VerifyPrevPath(InputData& in) {
     in.prev_path_y.push_back(next_p.y);
   }
   
-  cout << "Localization::ProcessUpdates() " << endl;
-  cout << "Localization::should be 2 or more " << in_.prev_path_x.size() << endl;
+  // cout << "Localization::ProcessUpdates() " << endl;
+  // cout << "Localization::should be 2 or more " << in_.prev_path_x.size() << endl;
   
   return;
 }
@@ -79,7 +79,8 @@ void Localization::Input (InputData& in) {
   
   Trajectory::LocalizationInput loc_in = {in.prev_path_x, in.prev_path_y};
   trajectory_.Input(loc_in);
-
+  
+  cout << "Localization last point to beh " << in.prev_path_x.back() << endl;
   in_buf_.Write(in);
   
   return;
@@ -100,7 +101,7 @@ Frenet Localization::CalcLastPos() {
   // covert last waypoint from cartesian point to frenet
   Frenet last_f = map_.CalcFrenet(last_p);
   
-  cout << "Localization::last_f " << last_f.s() << " " << last_f.d() << endl;
+  // cout << "Localization::last_f " << last_f.s() << " " << last_f.d() << endl;
   
   return last_f;
 }
@@ -187,8 +188,8 @@ void Localization::ProcessInputs () {
       last_f.v = CalcLastVel(last_f.p);
       last_f.a = CalcLastAcc(last_f.v);
       
-      cout << "Localization::Last s d for input to beh " << last_f.p.s() << endl;
-      cout << "Localization::Last v for input to beh " << last_f.v.s()  << endl;
+      // cout << "Localization::Last s d for input to beh " << last_f.p.s() << endl;
+      // cout << "Localization::Last v for input to beh " << last_f.v.s()  << endl;
       // use prev_f as starting point for behavior module
       
       // Pass frenet kinematics of last waypoint

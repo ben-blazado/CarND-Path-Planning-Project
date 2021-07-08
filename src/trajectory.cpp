@@ -10,9 +10,11 @@ namespace PathPlanning {
 using std::cout;
 using std::endl;
 
-Trajectory::Trajectory(Map& map) : map_(map) {
+Trajectory::Trajectory(Map& map, double max_exe_secs, double secs_per_update) 
+    : map_(map) {
   
   processing_ = false;
+  max_waypoints_ = max_exe_secs / secs_per_update;
   
   return;
 }
@@ -52,7 +54,7 @@ void Trajectory::ProcessInputs () {
     if (beh_in_buf_.TryRead(beh_in_)) {
       
       vector<Cartesian> waypoints;
-      cout << "Trajectory::ProcessUpdates::waypoints size from beh " << beh_in_.waypoints.size() << endl;
+      // cout << "Trajectory::ProcessUpdates::waypoints size from beh " << beh_in_.waypoints.size() << endl;
       for (int i = 0; i < beh_in_.waypoints.size(); i ++) {
         Cartesian p = map_.CalcCartesian(beh_in_.waypoints[i]);
         waypoints.push_back(p);
@@ -80,18 +82,82 @@ void Trajectory::Run () {
 bool Trajectory::Output(OutputData& out) {
   
   // TODO: can we get rid of this?
+  out.next_x_vals  = loc_in_.prev_path_x;
+  out.next_y_vals  = loc_in_.prev_path_y;
+  Cartesian last_p = {out.next_x_vals.back(), out.next_y_vals.back()};
+  
+  static vector<Cartesian> new_waypoints;
+  static vector<Cartesian> old_waypoints;
+  wp_buf_.TryRead(new_waypoints);
+  
+  vector<vector<Cartesian>*> plans;
+  plans.push_back(&new_waypoints);
+  plans.push_back(&old_waypoints);
+  
+  double num_waypoints = max_waypoints_ - out.next_x_vals.size();        
+  for (int p = 0; p < plans.size(); p ++) {
+    
+    vector<Cartesian>& waypoints = *plans[p];
+    
+    // try to find last xy coordinate of next_x_vals and next_y_vals
+    // in waypoints. this index will be used to start
+    // copying over coordinates from waypoints to next_x_vals and next_y_vals.
+    int found = -1;
+    for (int i = 0; i < waypoints.size(); i ++)
+      if ((fabs(last_p.x - waypoints[i].x) < 0.001) and 
+          (fabs(last_p.y - waypoints[i].y) < 0.001)) {
+        found = i;
+        break;
+      }
+    
+    // if found, copy over waypoints to next_x_vals and net_y_vals
+    if (found >= 0) {
+      for (int i = 0; i < num_waypoints; i ++) {
+        out.next_x_vals.push_back(waypoints[i + found + 1].x);
+        out.next_y_vals.push_back(waypoints[i + found + 1].y);
+      }
+      // save rest of waypoints to old waypoints
+      old_waypoints = {waypoints.begin() + found + 1, waypoints.end()};
+      break;
+    }
+  }
+  
+  return true;
+  
+}
+
+
+
+} // namespace
+    
+/*
+bool Trajectory::Output(OutputData& out) {
+  
+  // TODO: can we get rid of this?
   if (loc_in_.prev_path_x.size() > 0) {
     out.next_x_vals = loc_in_.prev_path_x;
     out.next_y_vals = loc_in_.prev_path_y;
     
+    cout << " " << endl;
+    cout << " " << endl;
+    cout << "*** *************** *** *************** ***************" << endl;
     cout << "*** size of prev wp ***" << out.next_x_vals.size() << endl;
 
     static vector<Cartesian> waypoints;
     static vector<Cartesian> old_waypoints;
-    if (wp_buf_.TryRead(waypoints))
-      cout << "********** using new way points  size: " << waypoints.size() << endl;
-    else
-      cout << "********** using old way points  size: " << old_waypoints.size() << endl;
+    if (wp_buf_.TryRead(waypoints)) 
+      cout << "NEW NEW NEW NEW NEW NEW way points read size: " << waypoints.size() << endl;
+    else {
+      cout << "waypoints NOT changed size: " << waypoints.size() << endl;
+        //if (waypoints.front().x != old_waypoints.front().x)
+    }
+    if (old_waypoints.size() > 0)
+      cout << "first old wp " << old_waypoints.front().x << endl;
+    cout << "********** current way points  size: " << waypoints.size() << endl;
+    if (waypoints.size() > 0) {
+      cout << "first curr wp " << waypoints.front().x << endl;
+      cout << "last curr wp " << waypoints.back().x << endl;      
+    }
     // find first waypoint that can connect to next x and y vals.
     int found = -1;
     for (int i = 0; i < waypoints.size(); i ++)
@@ -104,13 +170,15 @@ bool Trajectory::Output(OutputData& out) {
     if (found >= 0) {
       double max_waypoints = 0.8 / 0.02;
       double num_waypoints = max_waypoints - out.next_x_vals.size();        
-      cout << "Trajectory::Output num waypoints " << num_waypoints << endl; 
+      cout << "Trajectory::Output num NEW waypoints " << num_waypoints <<" found " << found << endl; 
+      cout << "NEW waypoints match at " << waypoints[found].x <<" found " << found << endl; 
       //TODO: is num_waypoints < 0 ok also?
       for (int i = 0; i < num_waypoints; i ++) {
         out.next_x_vals.push_back(waypoints[i + found + 1].x);
         out.next_y_vals.push_back(waypoints[i + found + 1].y);
       }
-      old_waypoints = waypoints;
+      //old_waypoints = waypoints;
+      old_waypoints = {waypoints.begin() + found + 1, waypoints.end()};
     }
     else {
       cout << "No Match " << endl; 
@@ -126,25 +194,25 @@ bool Trajectory::Output(OutputData& out) {
       if (found >= 0) {
         double max_waypoints = 0.8 / 0.02;
         double num_waypoints = max_waypoints - out.next_x_vals.size();        
-        cout << "Trajectory::Output num waypoints " << num_waypoints << endl; 
+        cout << "Trajectory::Output num OLD waypoints " << num_waypoints <<" found " << found << endl; 
+        cout << "OLD waypoints match at " << old_waypoints[found].x <<" found " << found << endl; 
         //TODO: is num_waypoints < 0 ok also?
         for (int i = 0; i < num_waypoints; i ++) {
           out.next_x_vals.push_back(old_waypoints[i + found + 1].x);
           out.next_y_vals.push_back(old_waypoints[i + found + 1].y);
         }
+        //if (found == 41)
+        //  exit (0);
       }
     }
+    cout << "Last pointx " << out.next_x_vals.back() << endl;
   }
   
   return true;
   
 }
 
-
-
-} // namespace
-    
- 
+*/ 
  
 /* 
 

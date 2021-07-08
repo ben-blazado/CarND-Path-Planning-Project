@@ -17,7 +17,7 @@ class Trajectory {
   
   public:
   
-    Trajectory(Map& map);
+    Trajectory(Map& map, double max_exe_secs, double secs_per_update);
     ~Trajectory();
     
     struct BehaviorInput {
@@ -40,6 +40,7 @@ class Trajectory {
   private:
 
     Map& map_;
+    double max_waypoints_;
     
     bool processing_;
     thread thread_;

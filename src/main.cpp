@@ -62,13 +62,14 @@ int main() {
   }
   
   // blazado: module initizalization
-  double secs_per_update = 0.02;
-  double max_secs        = 3.0;  // planning horizon
+  double secs_per_update  = 0.02;
+  double max_plan_secs    = 3.0;  // planning horizon
+  double max_exe_secs     = 0.8;  // execution horizon
   
   Map          map(map_waypoints_s, map_waypoints_x, map_waypoints_y,
                    map_waypoints_dx, map_waypoints_dy, max_s);
-  Trajectory   trajectory(map);
-  Behavior     behavior(trajectory, map, secs_per_update, max_secs);
+  Trajectory   trajectory(map, max_exe_secs, secs_per_update);
+  Behavior     behavior(trajectory, map, max_plan_secs, secs_per_update);
   //Prediction   prediction(behavior, map, secs_per_update, max_secs);
   Localization localization(behavior,trajectory, map, secs_per_update);
     

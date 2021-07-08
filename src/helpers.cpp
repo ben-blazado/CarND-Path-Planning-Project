@@ -169,6 +169,6 @@ double DiffTimePoint(time_point t2, time_point t1) {
 
   auto diff_int = duration_cast<milliseconds>(t2 - t1);
   
-  return double (diff_int.count()) / 1000.0;
+  return double (diff_int.count()) / 1000.0;  // returns in seconds
 }
 

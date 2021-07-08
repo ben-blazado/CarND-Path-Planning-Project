@@ -7,13 +7,13 @@ namespace PathPlanning {
 using std::cout;
 using std::endl;
 
-Behavior::Behavior (Trajectory& trajectory, Map& map, double secs_per_update, 
-    double max_secs) 
+Behavior::Behavior (Trajectory& trajectory, Map& map, double max_plan_secs, 
+    double secs_per_update) 
     : trajectory_(trajectory), map_(map) {
   
-  max_secs_      = max_secs;
+  max_secs_      = max_plan_secs;
   processing_    = false;
-  max_waypoints_ = max_secs / secs_per_update;
+  max_waypoints_ = max_plan_secs / secs_per_update;
   
   Path::SecsPerUpdate(secs_per_update);
 
@@ -50,7 +50,7 @@ void Behavior::GeneratePaths() {
   double num_waypoints = max_waypoints_ - in_.prev_num_waypoints;
   double v_s = in_.start.v.s();
   
-  cout << "*** start v " << v_s << endl;
+  // cout << "*** start v " << v_s << endl;
   if (num_waypoints <= 0) {
     cout << "error " << endl;
     exit(0);
@@ -156,14 +156,14 @@ void Behavior::ProcessInputs () {
     
     if (in_buf_.Read(in_)) {
       
-      cout << "Behavoir::input s d" << in_.start.p.s() << " " << in_.start.p.d() << endl;
+      // cout << "Behavoir::input s d" << in_.start.p.s() << " " << in_.start.p.d() << endl;
       
       GeneratePaths();
 
       Path& best_path = SelectBestPath();
       vector<Frenet> waypoints = best_path.waypoints_;
 
-      cout << "Behavoir::ProcessUpdates() " << waypoints.size() << endl;
+      // cout << "Behavoir::ProcessUpdates() " << waypoints.size() << endl;
       
       Trajectory::BehaviorInput beh_in = {in_.start.p, waypoints};
       trajectory_.Input(beh_in);

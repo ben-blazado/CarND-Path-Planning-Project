@@ -26,8 +26,8 @@ typedef struct {
 class Behavior {
   
   public:
-    Behavior(Trajectory& trajectory, Map& map, double secs_per_update, 
-        double max_secs);
+    Behavior(Trajectory& trajectory, Map& map, double max_plan_secs, 
+        double secs_per_update);
     ~Behavior();
     
     struct InputData {
