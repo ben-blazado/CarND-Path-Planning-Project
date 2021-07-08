@@ -39,19 +39,12 @@ Localization::~Localization() {
 
 }
 
-void Localization::Input (InputData& in) {
-  
-  in_buf_.Write(in);
-  
-  return;
-}
-
-
 // Ensures prev path has at least 2 waypoints.
 // This prepares prev_path to be used in CalcLastPos, CalcLastVel, CalcLastAcc.
-void Localization::VerifyPrevPath() {
+void Localization::VerifyPrevPath(InputData& in) {
   
-  int num_waypoints = in_.prev_path_x.size();
+  // verify that prev_path has at least 2 waypoints
+  int num_waypoints = in.prev_path_x.size();
   
   if (num_waypoints < 2) {
     
@@ -59,19 +52,35 @@ void Localization::VerifyPrevPath() {
       
       // prev path has 0 waypoints in prev_path!
       // use current car position for first way point.
-      in_.prev_path_x.push_back(in_.car_x);
-      in_.prev_path_y.push_back(in_.car_y);
+      in.prev_path_x.push_back(in.car_x);
+      in.prev_path_y.push_back(in.car_y);
     }
     
     // add second waypoint based on car location, speed and yaw.
     Cartesian next_p;
     double car_speed = in_.car_speed*dt_;
-    next_p.x = in_.prev_path_x[0] + car_speed*cos(in_.car_yaw);
-    next_p.y = in_.prev_path_y[0] + car_speed*sin(in_.car_yaw);
+    next_p.x = in.prev_path_x[0] + car_speed*cos(in.car_yaw);
+    next_p.y = in.prev_path_y[0] + car_speed*sin(in.car_yaw);
     
-    in_.prev_path_x.push_back(next_p.x);
-    in_.prev_path_y.push_back(next_p.y);
+    in.prev_path_x.push_back(next_p.x);
+    in.prev_path_y.push_back(next_p.y);
   }
+  
+  cout << "Localization::ProcessUpdates() " << endl;
+  cout << "Localization::should be 2 or more " << in_.prev_path_x.size() << endl;
+  
+  return;
+}
+
+
+void Localization::Input (InputData& in) {
+  
+  VerifyPrevPath(in);
+  
+  Trajectory::LocalizationInput loc_in = {in.prev_path_x, in.prev_path_y};
+  trajectory_.Input(loc_in);
+
+  in_buf_.Write(in);
   
   return;
 }
@@ -171,17 +180,10 @@ void Localization::ProcessInputs () {
     if (in_buf_.Read(in_)) {
       
       // verify that prev_path has at least 2 waypoints
-      VerifyPrevPath();
-      
-      cout << "Localization::ProcessUpdates() " << endl;
-      cout << "Localization::should be 2 or more " << in_.prev_path_x.size() << endl;
+      //VerifyPrevPath();
       
       Kinematic<Frenet> last_f;  // last point in frenet from previous path
       last_f.p = CalcLastPos();
-      
-      Trajectory::LocalizationInput tra_in = {last_f.p, in_.prev_path_x, in_.prev_path_y};
-      trajectory_.Input(tra_in);
-      
       last_f.v = CalcLastVel(last_f.p);
       last_f.a = CalcLastAcc(last_f.v);
       
@@ -193,6 +195,8 @@ void Localization::ProcessInputs () {
       // and number of waypoints of prev_path
       // to behavior module to generate new path.
       int num_waypoints = in_.prev_path_x.size();
+      
+      //test comment
       
       Behavior::InputData beh_in = {last_f, num_waypoints};
       behavior_.Input(beh_in);

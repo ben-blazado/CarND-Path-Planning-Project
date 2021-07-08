@@ -24,6 +24,7 @@ class Localization {
         double secs_per_update);
     ~Localization();
         
+    // input from main.cpp
     struct InputData {
       double         car_x;
       double         car_y;
@@ -52,7 +53,7 @@ class Localization {
     double         dt_;  // secs per interval update; should be 0.02 
     
     void   Update();
-    void   VerifyPrevPath();
+    void   VerifyPrevPath(InputData& in);
     Frenet CalcLastPos();
     Frenet CalcLastVel(Frenet last_f);
     Frenet CalcLastAcc(Frenet last_v);

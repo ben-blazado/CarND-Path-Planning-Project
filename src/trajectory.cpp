@@ -37,7 +37,7 @@ void Trajectory::Input(BehaviorInput& beh_in)  {
   
 void Trajectory::Input(LocalizationInput& loc_in) {
   
-  loc_in_buf_.Write(loc_in);
+  loc_in_ = loc_in;
   
   return;
 }
@@ -45,57 +45,24 @@ void Trajectory::Input(LocalizationInput& loc_in) {
 
 void Trajectory::ProcessInputs () {
   
-  vector<double> next_x_vals;
-  vector<double> next_y_vals;
+  vector<Cartesian> waypoints;
 
   while (processing_) {
 
-    bool loc_in_ready = loc_in_buf_.Read(loc_in_);
-    bool beh_in_ready = beh_in_buf_.TryRead(beh_in_);
-    
-    if (loc_in_ready) {
+    if (beh_in_buf_.TryRead(beh_in_)) {
       
-      cout << "Trajectory::ProcessUpdates::prev path_x size from loc " << loc_in_.prev_path_x.size() << endl;;
-      
-      if (loc_in_.prev_path_x.size() > 0) {
-        // add waypoints from previous path
-        next_x_vals = loc_in_.prev_path_x;
-        next_y_vals = loc_in_.prev_path_y;
-      }
-      
-      /*
-      if (beh_in_.waypoints.size() > 0)
-        if (beh_in_.waypoints[0].s() == loc_in_.last_f.s()) {
-          cout << "Trajectory::ProcessUpdates::waypoints size from beh " << beh_in_.waypoints.size() << endl;
-          // add waypoints from best path;
-          // start from waypoint 1 to attach since waypoint 0 
-          // is the same as start of last waypoint of prev path
-          double max_waypoints = 1.0 / 0.02;
-          double num_waypoints = max_waypoints - next_x_vals.size();        
-          if (num_waypoints > 0)
-            for (int i = 1; i < num_waypoints; i ++) {
-              Cartesian p = map_.CalcCartesian(beh_in_.waypoints[i]);
-              next_x_vals.push_back(p.x);
-              next_y_vals.push_back(p.y);
-            } 
-        }
-        else
-          cout << "******* next vals last and waypoints start DO NOT MATCH *********" << endl;
-      */
-      bool linked = (beh_in_.start.s() == loc_in_.last_f.s());
-      OutputData out = {next_x_vals, next_y_vals, linked, beh_in_.waypoints};
-      out_buf_.Write(out);
-      cout << "Trajectory::next_x_vals_ " << next_x_vals.size() << endl;
-      
-      next_x_vals.clear();
-      next_y_vals.clear();
-      beh_in_.waypoints.clear();
-      
-      
+      vector<Cartesian> waypoints;
+      cout << "Trajectory::ProcessUpdates::waypoints size from beh " << beh_in_.waypoints.size() << endl;
+      for (int i = 0; i < beh_in_.waypoints.size(); i ++) {
+        Cartesian p = map_.CalcCartesian(beh_in_.waypoints[i]);
+        waypoints.push_back(p);
+      } 
+      wp_buf_.Write(waypoints);
     }
     
+    // TODO: is this neded?
+    beh_in_.waypoints.clear();
   }
-  
   return;
 }
 
@@ -111,22 +78,65 @@ void Trajectory::Run () {
 
 
 bool Trajectory::Output(OutputData& out) {
-
-  bool successful = out_buf_.ReadDirty(out);
   
-  if ((out.waypoints.size() > 0) && (out.linked)) {
-    double max_waypoints = 0.8 / 0.02;
-    double num_waypoints = max_waypoints - out.next_x_vals.size();        
-    cout << "Trajectory::Output num waypoints " << num_waypoints << endl;
-    if (num_waypoints > 0)
-      for (int i = 1; i < num_waypoints; i ++) {
-        Cartesian p = map_.CalcCartesian(out.waypoints[i]);
-        out.next_x_vals.push_back(p.x);
-        out.next_y_vals.push_back(p.y);
+  // TODO: can we get rid of this?
+  if (loc_in_.prev_path_x.size() > 0) {
+    out.next_x_vals = loc_in_.prev_path_x;
+    out.next_y_vals = loc_in_.prev_path_y;
+    
+    cout << "*** size of prev wp ***" << out.next_x_vals.size() << endl;
+
+    static vector<Cartesian> waypoints;
+    static vector<Cartesian> old_waypoints;
+    if (wp_buf_.TryRead(waypoints))
+      cout << "********** using new way points  size: " << waypoints.size() << endl;
+    else
+      cout << "********** using old way points  size: " << old_waypoints.size() << endl;
+    // find first waypoint that can connect to next x and y vals.
+    int found = -1;
+    for (int i = 0; i < waypoints.size(); i ++)
+      if ((fabs(out.next_x_vals.back() - waypoints[i].x) < 0.001) and 
+          (fabs(out.next_y_vals.back() - waypoints[i].y) < 0.001)) {
+        found = i;
+        break;
       }
+    // add all waypoints after found to next x and y vals.
+    if (found >= 0) {
+      double max_waypoints = 0.8 / 0.02;
+      double num_waypoints = max_waypoints - out.next_x_vals.size();        
+      cout << "Trajectory::Output num waypoints " << num_waypoints << endl; 
+      //TODO: is num_waypoints < 0 ok also?
+      for (int i = 0; i < num_waypoints; i ++) {
+        out.next_x_vals.push_back(waypoints[i + found + 1].x);
+        out.next_y_vals.push_back(waypoints[i + found + 1].y);
+      }
+      old_waypoints = waypoints;
+    }
+    else {
+      cout << "No Match " << endl; 
+      // find first waypoint that can connect to next x and y vals.
+      int found = -1;
+      for (int i = 0; i < old_waypoints.size(); i ++)
+        if ((fabs(out.next_x_vals.back() - old_waypoints[i].x) < 0.001) and 
+            (fabs(out.next_y_vals.back() - old_waypoints[i].y) < 0.001)) {
+          found = i;
+          break;
+        }
+      // add all waypoints after found to next x and y vals.
+      if (found >= 0) {
+        double max_waypoints = 0.8 / 0.02;
+        double num_waypoints = max_waypoints - out.next_x_vals.size();        
+        cout << "Trajectory::Output num waypoints " << num_waypoints << endl; 
+        //TODO: is num_waypoints < 0 ok also?
+        for (int i = 0; i < num_waypoints; i ++) {
+          out.next_x_vals.push_back(old_waypoints[i + found + 1].x);
+          out.next_y_vals.push_back(old_waypoints[i + found + 1].y);
+        }
+      }
+    }
   }
   
-  return successful;
+  return true;
   
 }
 

@@ -25,15 +25,12 @@ class Trajectory {
       vector<Frenet> waypoints;
     };
     struct LocalizationInput {
-      Frenet         last_f;
       vector<double> prev_path_x;
       vector<double> prev_path_y;
     };
     struct OutputData {
       vector<double> next_x_vals;
       vector<double> next_y_vals;
-      bool linked;
-      vector<Frenet> waypoints;
     };
     void Input(BehaviorInput& beh_in);
     void Input(LocalizationInput& loc_in);
@@ -48,11 +45,12 @@ class Trajectory {
     thread thread_;
     mutex  mutex_;
     
-    BehaviorInput          beh_in_;
-    Buffer<BehaviorInput>  beh_in_buf_;
+    BehaviorInput             beh_in_;
+    Buffer<BehaviorInput>     beh_in_buf_;
+    Buffer<vector<Cartesian>> wp_buf_;
     
-    LocalizationInput          loc_in_;
-    Buffer<LocalizationInput>  loc_in_buf_;
+    LocalizationInput loc_in_;
+
     
     OutputData         out_;
     Buffer<OutputData> out_buf_;

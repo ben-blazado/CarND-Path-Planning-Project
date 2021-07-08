@@ -75,15 +75,14 @@ void Behavior::GeneratePaths() {
     
     end.a = {a, 0};
     
-    // Path path(in_.start, end, t, num_waypoints);
     Path path(in_.start, end, t, max_waypoints_);
-    cout << "path ds_ " << path.ds_ << endl;
-    cout << "end_v_s " << end_v_s << endl;
+    //cout << "path ds_ " << path.ds_ << endl;
+    //cout << "end_v_s " << end_v_s << endl;
     
     paths_.push_back(path);
   }
   
-  cout << "num_paths " << paths_.size() << endl;
+  // cout << "num_paths " << paths_.size() << endl;
   
   return;
 }
@@ -107,7 +106,7 @@ Path& Behavior::SelectBestPath() {
     if (dv < lowest_dv) {
       lowest_dv = dv;
       best = i;
-      cout << "best path [" << best << "] last vs " << path_last_v << endl;
+      // cout << "best path [" << best << "] last vs " << path_last_v << endl;
     }
     /*
     if ((paths_[i].max_a_.s() < 8) and (max_a < paths_[i].max_a_.s())) {

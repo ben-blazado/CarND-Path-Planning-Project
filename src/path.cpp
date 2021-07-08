@@ -146,7 +146,7 @@ Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
   if (Path::max_last_v_s_ < last_v_s_)
     Path::max_last_v_s_ = last_v_s_;
 
-  cout << "Path::Path() created " << waypoints_.size() << endl;
+  // cout << "Path::Path() created " << waypoints_.size() << endl;
 
   //if (max_v_.s() >= 22.352) {
   //  cout << "max v exceeded " << max_v_.s() << endl;
