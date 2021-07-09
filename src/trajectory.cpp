@@ -9,6 +9,7 @@ namespace PathPlanning {
   
 using std::cout;
 using std::endl;
+using std::min;
 
 Trajectory::Trajectory(Map& map, double max_exe_secs, double secs_per_update) 
     : map_(map) {
@@ -69,16 +70,76 @@ void Trajectory::ProcessInputs () {
 }
 
 
+// runs the ProcessInputs() method as a thread.
 void Trajectory::Run () {
   
   processing_ = true;
   thread_     = thread( [this] { ProcessInputs(); } );
   
   return;
-  
 }
 
 
+bool Trajectory::Output(OutputData& out) {
+  
+  // get last point of prev path which is the starting point 
+  // of new waypoints that will be added to prev path.
+  out.next_x_vals  = loc_in_.prev_path_x;
+  out.next_y_vals  = loc_in_.prev_path_y;
+  Cartesian last_p = {out.next_x_vals.back(), out.next_y_vals.back()};
+
+  // try to find the index position of last point (last_p) in new_waypoints. 
+  // if found, this index will be used to start
+  // copying over coordinates from waypoints to next_x_vals and next_y_vals.
+  int start_idx = -1;
+  vector<Cartesian> new_waypoints;
+  if (wp_buf_.TryRead(new_waypoints))
+    for (int i = 0; i < new_waypoints.size(); i ++)
+      if ((fabs(last_p.x - new_waypoints[i].x) < 0.001) and 
+          (fabs(last_p.y - new_waypoints[i].y) < 0.001)) {
+        start_idx = i;
+        break;
+      }
+
+  // if the last_p was found in new_waypoints, use new_waypoints
+  // as the trajectory to add to next_x and next_y vals starting at start_idx.
+  // if last_p was not found, then use the old waypoints.
+  static vector<Cartesian> old_waypoints;
+  vector<Cartesian> waypoints;
+  if (start_idx >= 0) 
+    waypoints = {new_waypoints.begin() + start_idx, new_waypoints.end()};
+  else
+    waypoints = old_waypoints;
+
+  // add the waypoints to next_x and next_y vals.
+  // caculate num_waypoints to add to next_x and next_y vals;
+  int num_waypoints = max_waypoints_ - out.next_x_vals.size();
+  // ensure num_waypoints does not exceeed size of waypoints
+  num_waypoints = min(num_waypoints, static_cast<int>(waypoints.size()));
+  if (num_waypoints > 0) {
+    // start at i=1. if i=0 is used, which is the last point of next vals
+    // and the first point of waypoints, then that waypoint would be duplicated.
+    for (int i = 1; i < num_waypoints; i ++) {
+      out.next_x_vals.push_back(waypoints[i].x);
+      out.next_y_vals.push_back(waypoints[i].y);
+    }
+    // copy over  waypoints starting at num_waypoints - 1 until the end.
+    // the first waypoint of old_waypoints is now the last_p 
+    // of prev_path on the next call and will allow old_waypoints to be used 
+    // in case new_waypoints does not have last_p.
+    old_waypoints = {waypoints.begin() + num_waypoints - 1, waypoints.end()};
+  }
+  
+  // TODO: remove true, make method a void.
+  return true;
+}
+
+
+
+} // namespace
+    
+
+/*
 bool Trajectory::Output(OutputData& out) {
   
   // TODO: can we get rid of this?
@@ -110,14 +171,15 @@ bool Trajectory::Output(OutputData& out) {
         break;
       }
     
-    // if found, copy over waypoints to next_x_vals and net_y_vals
+    // if found, copy waypoints starting at found + 1 
+    // to next_x_vals and net_y_vals.
     if (found >= 0) {
       for (int i = 0; i < num_waypoints; i ++) {
         out.next_x_vals.push_back(waypoints[i + found + 1].x);
         out.next_y_vals.push_back(waypoints[i + found + 1].y);
       }
-      // save rest of waypoints to old waypoints
-      old_waypoints = {waypoints.begin() + found + 1, waypoints.end()};
+      // save rest of waypoints to old waypoints.
+      old_waypoints = {waypoints.begin() + found + num_waypoints, waypoints.end()};
       break;
     }
   }
@@ -125,11 +187,9 @@ bool Trajectory::Output(OutputData& out) {
   return true;
   
 }
+*/
 
 
-
-} // namespace
-    
 /*
 bool Trajectory::Output(OutputData& out) {
   

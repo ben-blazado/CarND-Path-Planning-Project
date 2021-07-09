@@ -40,7 +40,7 @@ class Trajectory {
   private:
 
     Map& map_;
-    double max_waypoints_;
+    int max_waypoints_;
     
     bool processing_;
     thread thread_;
