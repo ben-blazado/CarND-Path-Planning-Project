@@ -67,7 +67,7 @@ void Localization::VerifyPrevPath(InputData& in) {
   }
   
   // cout << "Localization::ProcessUpdates() " << endl;
-  // cout << "Localization::should be 2 or more " << in_.prev_path_x.size() << endl;
+  cout << "Localization::should be 2 or more " << in_.prev_path_x.size() << endl;
   
   return;
 }
@@ -80,7 +80,9 @@ void Localization::Input (InputData& in) {
   Trajectory::LocalizationInput loc_in = {in.prev_path_x, in.prev_path_y};
   trajectory_.Input(loc_in);
   
-  cout << "Localization last point to beh " << in.prev_path_x.back() << endl;
+  // cout << "Localization last point to beh " << in.prev_path_x.back() << endl;
+  //TODO: change to out buf? as in out buf to beh?
+  //TODO: rename all reads to write?
   in_buf_.Write(in);
   
   return;

@@ -17,12 +17,12 @@ class Trajectory {
   
   public:
   
-    Trajectory(Map& map, double max_exe_secs, double secs_per_update);
+    Trajectory(Map& map, double max_exe_secs, 
+        double secs_per_update, double max_v);
     ~Trajectory();
     
     struct BehaviorInput {
-      Frenet start;
-      vector<Frenet> waypoints;
+      vector<vector<Frenet>> sorted_waypoints;
     };
     struct LocalizationInput {
       vector<double> prev_path_x;
@@ -41,6 +41,8 @@ class Trajectory {
 
     Map& map_;
     int max_waypoints_;
+    double secs_per_update_;
+    double max_v_;
     
     bool processing_;
     thread thread_;
@@ -51,12 +53,12 @@ class Trajectory {
     Buffer<vector<Cartesian>> wp_buf_;
     
     LocalizationInput loc_in_;
-
     
     OutputData         out_;
     Buffer<OutputData> out_buf_;
     
     void ProcessInputs();
+    bool Valid(vector<Cartesian> waypoints);
 };
 
 } // PathPlanning

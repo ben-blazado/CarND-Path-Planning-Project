@@ -11,11 +11,14 @@ using std::cout;
 using std::endl;
 using std::min;
 
-Trajectory::Trajectory(Map& map, double max_exe_secs, double secs_per_update) 
+Trajectory::Trajectory(Map& map, double max_exe_secs, double secs_per_update,
+    double max_v) 
     : map_(map) {
   
   processing_ = false;
   max_waypoints_ = max_exe_secs / secs_per_update;
+  secs_per_update_ = secs_per_update;
+  max_v_ = max_v;
   
   return;
 }
@@ -46,6 +49,28 @@ void Trajectory::Input(LocalizationInput& loc_in) {
 }
 
 
+bool Trajectory::Valid(vector<Cartesian> waypoints) {
+  
+  bool valid = true;
+  
+  for (int i = 1; i < waypoints.size(); i ++) {
+    Cartesian wp2 = waypoints[i];
+    Cartesian wp1 = waypoints[i - 1];
+    
+    double d = distance (wp2.x, wp2.y, wp1.x, wp1.y);
+    double v = d / secs_per_update_;
+    if (v > max_v_) {
+      valid = false;
+      break;
+    }
+    
+    //TODO: get acc, lat and long
+  }
+  
+  return valid;
+}
+
+
 void Trajectory::ProcessInputs () {
   
   vector<Cartesian> waypoints;
@@ -54,17 +79,23 @@ void Trajectory::ProcessInputs () {
 
     if (beh_in_buf_.TryRead(beh_in_)) {
       
-      vector<Cartesian> waypoints;
-      // cout << "Trajectory::ProcessUpdates::waypoints size from beh " << beh_in_.waypoints.size() << endl;
-      for (int i = 0; i < beh_in_.waypoints.size(); i ++) {
-        Cartesian p = map_.CalcCartesian(beh_in_.waypoints[i]);
-        waypoints.push_back(p);
-      } 
-      wp_buf_.Write(waypoints);
-    }
+      for (int i = 0; i < beh_in_.sorted_waypoints.size(); i ++) {
+        
+        vector<Cartesian> waypoints;
+        // calculate cartesian of each waypoint w.
+        for (int w = 0; w < beh_in_.sorted_waypoints[i].size(); w ++) {
+          Cartesian p = map_.CalcCartesian(beh_in_.sorted_waypoints[i][w]);
+          waypoints.push_back(p);
+        }
+        if (Valid(waypoints)) {
+          wp_buf_.Write(waypoints);
+          break;
+        } 
+      }  // for
+    } // if
     
     // TODO: is this neded?
-    beh_in_.waypoints.clear();
+    beh_in_.sorted_waypoints.clear();
   }
   return;
 }
@@ -108,8 +139,10 @@ bool Trajectory::Output(OutputData& out) {
   vector<Cartesian> waypoints;
   if (start_idx >= 0) 
     waypoints = {new_waypoints.begin() + start_idx, new_waypoints.end()};
-  else
+  else {
     waypoints = old_waypoints;
+    cout << "Old waypoints left " << waypoints.size() << endl;
+  }
 
   // add the waypoints to next_x and next_y vals.
   // caculate num_waypoints to add to next_x and next_y vals;

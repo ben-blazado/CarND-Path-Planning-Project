@@ -8,6 +8,7 @@ namespace PathPlanning {
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using std::abs;
+using std::max;
 using std::cout;
 using std::endl;
 
@@ -65,12 +66,19 @@ vector<double> JMTCoeffs(Kinematic<double> &start, Kinematic<double> &end,
   return {start.p, start.v, start.a/2.0, A_vec[0], A_vec[1], A_vec[2]};
 }
 
+
 double Path::secs_per_update_;
+
+
+// class stats. used in calculating scores per path instance.
 double Path::max_dd_;
 double Path::max_ds_;
 double Path::max_avg_v_s_;
 double Path::max_last_v_s_;
 
+
+// resets stats for entire class. 
+// call before calculating stats for each instance.
 void Path::ResetStats() {
   
   double secs_per_update_ = 0;
@@ -81,6 +89,7 @@ void Path::ResetStats() {
   
   return;
 }
+
 
 Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
     int num_waypoints) {
@@ -93,91 +102,131 @@ Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
   Kinematic<double> end_d   = {end.p.d(),   end.v.d(),   end.a.d()};
   vector<double> d_coeffs = JMTCoeffs(start_d, end_d, t);
 
-  ds_       = 0;
-  dd_       = 0;
-  avg_v_s_  = 0;
-  last_v_s_ = 0;
-
-  double tot_v_s = 0;
-  double secs = 0;
-  
-  // use starting position as first position of waypoint
+  // use starting position as first waypoint.
+  // TODO: explain why start point is included
   waypoints_.push_back(start.p);
   
+  double secs = 0;
+
   for (int i = 0; i < num_waypoints; i ++) {
 
-    // calulate next waypoint {s, d}
+    // calulate next waypoint {s, d}.
     secs += secs_per_update_;
     double s = QuinticPosition(secs, s_coeffs); 
     double d = QuinticPosition(secs, d_coeffs);
 
-    // waypoints should automatically be normalized between [0, max_s_);
+    // waypoints should automatically be normalized between [0, max_s_).
     // see class def of Frenet.
     Frenet waypoint = {s, d};
     waypoints_.push_back(waypoint); 
-
-    // generate stats on path
-    Frenet wp2 = waypoints_[i];
-    Frenet wp1 = waypoints_[i-1];
-    
-    // accumulate shift along d-axis
-    dd_ += fabs(wp2.d() - wp1.d());
-    if (dd_ > Path::max_dd_)
-      Path::max_dd_ = dd_;
-    
-    // acculate total velocity along s axis for averaging
-    tot_v_s += ((wp2.s() - wp1.s()) /  secs_per_update_);
   }
-  
-  // calculate remaining stats
-  int last = waypoints_.size() - 1;
-  
-  // calculate total longitudinal distance
-  ds_ += waypoints_[last].s() - waypoints_[0].s();
-  if (Path::max_ds_ < ds_)
-    Path::max_ds_ = ds_;
-  
-  // calculate average 
-  avg_v_s_ = tot_v_s / (waypoints_.size() - 1);
-  if (Path::max_avg_v_s_ < avg_v_s_)
-    Path::max_avg_v_s_ = avg_v_s_;
-  
-  last_v_s_ = (waypoints_[last].s() - waypoints_[last - 1].s()) / secs_per_update_;
-  if (Path::max_last_v_s_ < last_v_s_)
-    Path::max_last_v_s_ = last_v_s_;
-
-  // cout << "Path::Path() created " << waypoints_.size() << endl;
-
-  //if (max_v_.s() >= 22.352) {
-  //  cout << "max v exceeded " << max_v_.s() << endl;
-  // exit(0);
-  // }
   
   return;
 }
- 
-double Path::DistanceScore (Path& path) {
+
+
+// update instance stats.
+// path must have at least 2 waypoints.
+void Path::UpdateStats() {
   
-  return path.ds_ / Path::max_ds_;
+  // initialize instance stats.
+  ds_       = 0;
+  dd_       = 0;
+  avg_v_s_  = 0;
+  last_v_s_ = 0;
+  
+  // used in averageing velocity over entire path.
+  double sum_v_s = 0;
+  
+  int num_waypoints = waypoints_.size();
+
+  for (int i = 1; i < num_waypoints; i ++) {
+
+    // need at least two waypoints
+    Frenet wp2 = waypoints_[i];
+    Frenet wp1 = waypoints_[i-1];  // TODO: whatif i == 0.
+    
+    // accumulate shift along d-axis
+    dd_ += fabs(wp2.d() - wp1.d());
+    Path::max_dd_ = max(Path::max_dd_, dd_);
+    
+    // acculate total velocity along s axis for averaging.
+    // used to calculate avg velocity along entire path.
+    sum_v_s += ((wp2.s() - wp1.s()) /  secs_per_update_);
+  }
+  
+  // calculate remaining stats
+  int last = num_waypoints - 1;
+  
+  // calculate total longitudinal distance
+  ds_ += waypoints_[last].s() - waypoints_[0].s();
+  Path::max_ds_ = max(Path::max_ds_, ds_);
+  
+  // calculate average velocity along entire path
+  avg_v_s_ = sum_v_s / waypoints_.size();
+  Path::max_avg_v_s_ = max(Path::max_avg_v_s_, avg_v_s_);
+  
+  // calculate exit velocity of path (velocity at last waypoint)
+  last_v_s_ = (waypoints_[last].s() - waypoints_[last - 1].s()) 
+      / secs_per_update_;
+  Path::max_last_v_s_ = max(Path::max_last_v_s_, last_v_s_);
+  
+  return;
+}
+
+
+void Path::UpdateScore() {
+  
+  score_ = 0.0;
+  for (int i = 0; i < Path::score_functions_.size(); i ++) {
+    double w = Path::score_functions_[i].weight;
+    score_ += w*Path::score_functions_[i].f(*this);
+  }
   
 }
+
+  
+double Path::DistanceScore (Path& path) {
+  return path.ds_ / Path::max_ds_;
+}
+
 
 double Path::LaneKeepingScore(Path& path) {
-  
   return fabs (Path::max_dd_ - path.dd_) / Path::max_dd_;
-  
 }
 
-double Path::AverageVeloctityScore(Path &path) {
-  
+
+double Path::AverageVelocityScore(Path &path) {
   return (path.avg_v_s_ / Path::max_avg_v_s_);
-  
 }
+
   
-double Path::LastVelocity(Path &path) {
-  
+double Path::LastVelocityScore(Path &path) {
   return path.last_v_s_ / Path::max_last_v_s_;
-  
+}
+
+
+vector<Path::ScoreFunction> Path::score_functions_ = {
+  {
+    Path::DistanceScore, 
+    0.572
+  },
+  {
+    Path::LaneKeepingScore, 
+    0.109
+  },
+  {
+    Path::AverageVelocityScore, 
+    0.209
+  },
+  {
+    Path::LastVelocityScore,
+    0.109
+  }
+};
+
+bool Path::GreaterThan(Path& p1, Path& p2) {
+  return p1.score_ > p2.score_;
 }
  
 } // namespace

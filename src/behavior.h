@@ -54,7 +54,8 @@ class Behavior {
     Buffer<InputData> in_buf_;
     
     void GeneratePaths();
-    Path& SelectBestPath();
+    void ScorePaths();
+    vector<vector<Frenet>> SortedWaypoints();
     vector<Path> paths_;
     
     void ProcessInputs();
