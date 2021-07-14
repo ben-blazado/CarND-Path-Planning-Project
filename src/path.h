@@ -16,8 +16,8 @@ class Path {
 
     static void SecsPerUpdate(double secs) { secs_per_update_ = secs; }
   
-    Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
-        int num_waypoints);
+    Path (time_point tp, Kinematic<Frenet>& start, Kinematic<Frenet>& end, 
+        double t, int num_waypoints);
     void UpdateStats();
     void UpdateScore();
     

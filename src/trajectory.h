@@ -4,6 +4,7 @@
 #include "map.h"
 #include "path.h"
 #include "buffer.hpp"
+#include "helpers.h"
 
 #include <thread>
 #include <mutex>
@@ -22,6 +23,7 @@ class Trajectory {
     ~Trajectory();
     
     struct BehaviorInput {
+      time_point tp;
       vector<vector<Frenet>> sorted_waypoints;
     };
     struct LocalizationInput {
@@ -46,6 +48,7 @@ class Trajectory {
     
     bool processing_;
     thread thread_;
+    //TODO: do we still use MUTEX? delete if already be in buffer.h.
     mutex  mutex_;
     
     BehaviorInput             beh_in_;
@@ -58,7 +61,8 @@ class Trajectory {
     Buffer<OutputData> out_buf_;
     
     void ProcessInputs();
-    bool Valid(vector<Cartesian> waypoints);
+    bool FrenetToCartesian(const vector<Frenet>& f_waypoints, 
+        vector<Cartesian>& waypoints);
 };
 
 } // PathPlanning

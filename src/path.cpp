@@ -91,7 +91,7 @@ void Path::ResetStats() {
 }
 
 
-Path::Path (Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
+Path::Path (time_point tp, Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
     int num_waypoints) {
       
   Kinematic<double> start_s = {start.p.s(), start.v.s(), start.a.s()};

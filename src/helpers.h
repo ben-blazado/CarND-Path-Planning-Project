@@ -51,7 +51,7 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 typedef std::chrono::system_clock system_clock;
 typedef std::chrono::time_point<system_clock> time_point;
 
-time_point GetTimeNow();
+time_point TimeNow();
 double DiffTimePoint(time_point tp_f, time_point tp_i); // in seconds
   
   

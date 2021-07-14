@@ -49,22 +49,32 @@ void Trajectory::Input(LocalizationInput& loc_in) {
 }
 
 
-bool Trajectory::Valid(vector<Cartesian> waypoints) {
-  
+bool Trajectory::FrenetToCartesian(const vector<Frenet>& f_waypoints, 
+    vector<Cartesian>& waypoints) {
+
   bool valid = true;
   
-  for (int i = 1; i < waypoints.size(); i ++) {
-    Cartesian wp2 = waypoints[i];
-    Cartesian wp1 = waypoints[i - 1];
+  // covert each frenet waypoint to cartesian
+  for (int i = 0; i < f_waypoints.size(); i ++) {
     
-    double d = distance (wp2.x, wp2.y, wp1.x, wp1.y);
-    double v = d / secs_per_update_;
-    if (v > max_v_) {
-      valid = false;
-      break;
+    Cartesian p;
+    map_.CalcCartesian(f_waypoints[i], p);
+    waypoints.push_back(p);
+    
+    // validate velocity
+    if (i > 0) {
+      Cartesian wp2 = waypoints[i];
+      Cartesian wp1 = waypoints[i - 1];
+      
+      double d = distance (wp2.x, wp2.y, wp1.x, wp1.y);
+      double v = d / secs_per_update_;
+      
+      // invalidate waypoints if v exceeds max_v
+      if (v >= max_v_) {
+        valid = false;
+        break;
+      }
     }
-    
-    //TODO: get acc, lat and long
   }
   
   return valid;
@@ -80,17 +90,16 @@ void Trajectory::ProcessInputs () {
     if (beh_in_buf_.TryRead(beh_in_)) {
       
       for (int i = 0; i < beh_in_.sorted_waypoints.size(); i ++) {
-        
+
         vector<Cartesian> waypoints;
-        // calculate cartesian of each waypoint w.
-        for (int w = 0; w < beh_in_.sorted_waypoints[i].size(); w ++) {
-          Cartesian p = map_.CalcCartesian(beh_in_.sorted_waypoints[i][w]);
-          waypoints.push_back(p);
-        }
-        if (Valid(waypoints)) {
+        
+        // convert frenet waypoints (from behavior module) to cartesian.
+        if (FrenetToCartesian(beh_in_.sorted_waypoints[i], waypoints)) {
           wp_buf_.Write(waypoints);
           break;
         } 
+        else
+          waypoints.clear();
       }  // for
     } // if
     

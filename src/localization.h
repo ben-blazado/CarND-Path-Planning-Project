@@ -26,6 +26,7 @@ class Localization {
         
     // input from main.cpp
     struct InputData {
+      time_point     tp;
       double         car_x;
       double         car_y;
       double         car_yaw;
@@ -36,6 +37,7 @@ class Localization {
     void Input(InputData& in);
     void Run();
     
+    //TODO: remove tests.
     void Test();
     
   private:
@@ -50,11 +52,12 @@ class Localization {
     InputData         in_;
     Buffer<InputData> in_buf_;
     
-    double         dt_;  // secs per interval update; should be 0.02 
+    double dt_;  // secs per update (delta t); should be 0.02 
     
     void   Update();
     void   VerifyPrevPath(InputData& in);
     Frenet CalcLastPos();
+    //TODO: change input params to const&!!!.
     Frenet CalcLastVel(Frenet last_f);
     Frenet CalcLastAcc(Frenet last_v);
     void   ProcessInputs();     

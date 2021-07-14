@@ -77,8 +77,8 @@ class Map {
     Map (vector<double>& maps_s, vector<double>& maps_x, vector<double>& maps_y, 
         vector<double>& maps_nx, vector<double>& maps_ny, double max_s);
     
-    Cartesian CalcCartesian (Frenet f);
-    Frenet    CalcFrenet    (Cartesian p);
+    void CalcCartesian (const Frenet& f, Cartesian& p);
+    void CalcFrenet    (const Cartesian& p, Frenet& f);
     
     double Add(double s, double ds);
     double Diff(double s2, double s1);

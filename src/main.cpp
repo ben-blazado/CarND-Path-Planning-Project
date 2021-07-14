@@ -13,6 +13,7 @@
 #include "map.h"
 #include "behavior.h"
 #include "localization.h"
+#include "prediction.h"
 
 // for convenience
 using nlohmann::json;
@@ -23,6 +24,7 @@ using PathPlanning::Map;
 using PathPlanning::Behavior;
 using PathPlanning::Localization;
 using PathPlanning::Trajectory;
+using PathPlanning::Prediction;
 
 int main() {
   uWS::Hub h;
@@ -64,25 +66,26 @@ int main() {
   // blazado: module initizalization
   double secs_per_update = 0.02;
   double max_plan_secs   = 3.0;  // planning horizon.
-  double max_exe_secs    = 0.4;  // execution horizon.
-  double max_v           = 22.262; //22.128; // in meters/sec. about 49.5 mph
+  double max_exe_secs    = 0.2;  // execution horizon.
+  double max_v           = 22.240; //22.128; // in meters/sec. about 49.5 mph
   
   Map          map(map_waypoints_s, map_waypoints_x, map_waypoints_y,
                    map_waypoints_dx, map_waypoints_dy, max_s);
   Trajectory   trajectory(map, max_exe_secs, secs_per_update, max_v);
   Behavior     behavior(trajectory, map, max_plan_secs, secs_per_update);
-  //Prediction   prediction(behavior, map, secs_per_update, max_secs);
+  Prediction   prediction;
   Localization localization(behavior,trajectory, map, secs_per_update);
     
   localization.Run();
-  //prediction.Run();
+  prediction.Run();
   behavior.Run();
   trajectory.Run();
   
   //https://stackoverflow.com/questions/5395309/how-do-i-force-cmake-to-include-pthread-option-during-compilation
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy,&localization,&trajectory]
+               &map_waypoints_dx,&map_waypoints_dy,&localization,&trajectory,
+               &prediction]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -129,12 +132,14 @@ int main() {
            *   sequentially every .02 seconds
            */
            
-          Localization::InputData loc_in = {car_x, car_y, car_yaw, car_speed, 
+          time_point tp = TimeNow();
+           
+          Localization::InputData loc_in = {tp, car_x, car_y, car_yaw, car_speed, 
               previous_path_x, previous_path_y};
           localization.Input(loc_in);
           
-          // Prediction::InputData pre_in = {sensor_fusion};
-          // prediction.Input(pre_in);
+          Prediction::InputData pre_in = {tp, sensor_fusion};
+          prediction.Input(pre_in);
             
           Trajectory::OutputData tra_out;
           if (trajectory.Output(tra_out)) {

@@ -33,50 +33,45 @@ Behavior::~Behavior() {
 }
 
 
-void Behavior::Input(InputData& in) {
+void Behavior::Input(LocalizationInput& loc_in) {
   
-  in_buf_.Write(in);
+  loc_in_buf_.Write(loc_in);
   
   return;
 }
 
 void Behavior::GeneratePaths() {
 
-  const double      max_v_s = 22.352;
-  Kinematic<Frenet> end;
-
-  paths_.clear();
   Path::ResetStats();
-  double num_waypoints = max_waypoints_ - in_.prev_num_waypoints;
-  double v_s = in_.start.v.s();
+  paths_.clear();
   
-  // cout << "*** start v " << v_s << endl;
-  if (num_waypoints <= 0) {
-    cout << "error " << endl;
-    exit(0);
-  }
-  //double t = num_waypoints*Path::secs_per_update_;
+  double num_waypoints = max_waypoints_ - loc_in_.prev_num_waypoints;
+  double v_s = loc_in_.start.v.s();
   double t = max_secs_;
+  double tdiv2 = 0.5*t;
 
-  for (double a = -10; a <= 5; a += (a < 0 ? 2.0 : 0.125)) 
+  for (double a = -10; a <= 5; a += (a < 0 ? 2.0 : 0.125)) {
+    
+    double at = a*t;
+
     for (int lane = 0; lane < 3; lane ++) {
     
-      double end_v_s = v_s + a*t;
+      double end_v_s = v_s + at;
       if (end_v_s < 0)
+        // don't create a path that goes in reverse.
         continue;
       
-      double ds = v_s*t + 0.5*a*t*t; 
+      double ds = v_s*t + at*tdiv2; 
+      
+      Kinematic<Frenet> end;
       
       // okay if s > max_s because s gets normalized in calc_xy
       // ensures that the end d is in middle of current lane
-      end.p = {in_.start.p.s() + ds, map_.Lane2D(lane)};
-      //end.p.d = in_.start.p.d;
-      
+      end.p = {loc_in_.start.p.s() + ds, map_.Lane2D(lane)};
       end.v = {end_v_s, 0};
-      
       end.a = {a, 0};
       
-      Path path(in_.start, end, t, max_waypoints_);
+      Path path(loc_in_.tp, loc_in_.start, end, t, max_waypoints_);
       //cout << "path ds_ " << path.ds_ << endl;
       //cout << "end_v_s " << end_v_s << endl;
       
@@ -84,6 +79,7 @@ void Behavior::GeneratePaths() {
       
       paths_.push_back(path);
     }
+  }
   
   // cout << "num_paths " << paths_.size() << endl;
   
@@ -112,47 +108,19 @@ vector<vector<Frenet>> Behavior::SortedWaypoints () {
 }
   
 
-  /*
-  paths_.clear();
-  
-  Kinematic<Frenet> end;
-  double target_vel = 21; 
-  double max_distance = target_vel * max_secs_;
-  
-  // okay if s > max_s because s gets normalized in calc_xy
-  end.p.s = in_.start.p.s + max_distance;
-  // ensures that the end d is in middle of current lane
-  end.p.d = map_.Lane2D(1);
-  //end.p.d = in_.start.p.d;
-  
-  end.v.s = target_vel;
-  end.v.d = 0;
-  
-  end.a.s = 0;
-  end.a.d = 0;
-  
-  double max_waypoints = max_secs_ / 0.02;
-  double num_waypoints = max_waypoints - in_.prev_num_waypoints;
-  
-  Path path(in_.start, end, max_secs_, num_waypoints);
-  
-  paths_.push_back(path);
-  */
-
 void Behavior::ProcessInputs () {
 
   while (processing_) {
+ 
+    loc_in_buf_.TryRead(loc_in_);
+      
+    // cout << "Behavoir::input s d" << in_.start.p.s() << " " << in_.start.p.d() << endl;
     
-    if (in_buf_.Read(in_)) {
-      
-      // cout << "Behavoir::input s d" << in_.start.p.s() << " " << in_.start.p.d() << endl;
-      
-      GeneratePaths();
-      ScorePaths();
+    GeneratePaths();
+    ScorePaths();
 
-      Trajectory::BehaviorInput beh_in = {SortedWaypoints()};
-      trajectory_.Input(beh_in);
-    }
+    Trajectory::BehaviorInput beh_in = {loc_in_.tp, SortedWaypoints()};
+    trajectory_.Input(beh_in);
   } 
   
   return;

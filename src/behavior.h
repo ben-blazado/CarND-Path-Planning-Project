@@ -30,11 +30,12 @@ class Behavior {
         double secs_per_update);
     ~Behavior();
     
-    struct InputData {
+    struct LocalizationInput {
+      time_point tp;
       Kinematic<Frenet> start;
-      int prev_num_waypoints;
+      int prev_num_waypoints; // TODO: is this needed?
     };
-    void Input(InputData& in);
+    void Input(LocalizationInput& in);
     
     void Run();
       
@@ -50,8 +51,8 @@ class Behavior {
     bool  processing_;
     thread thread_;
     
-    InputData         in_;
-    Buffer<InputData> in_buf_;
+    LocalizationInput         loc_in_;
+    Buffer<LocalizationInput> loc_in_buf_;
     
     void GeneratePaths();
     void ScorePaths();

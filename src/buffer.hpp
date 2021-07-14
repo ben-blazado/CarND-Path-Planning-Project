@@ -15,7 +15,7 @@ class Buffer {
   
   public:
     Buffer();
-    bool Write(T& d);
+    bool Write(const T& d);
     bool TryRead(T& d);
     bool Read(T& d);    
     bool ReadDirty(T& d);    
@@ -35,12 +35,21 @@ Buffer<T>::Buffer () {
   return;
 }
 
+// write data from d to the buffer.
 template <typename T>
-bool Buffer<T>::Write(T& d) {
+bool Buffer<T>::Write(const T& d) {
   
   bool successful;
   unique_lock<mutex> l(m_, defer_lock);
   
+  l.lock();
+  data_      = d;
+  updated_   = true;
+  l.unlock();
+  
+  successful = true;
+
+  /*
   if (l.try_lock()) {
     data_      = d;
     updated_   = true;
@@ -49,10 +58,12 @@ bool Buffer<T>::Write(T& d) {
   }
   else
     successful = false;
+  */
   
   return successful;
 }
 
+// try to read data from the buffer to d.
 template <typename T>
 bool Buffer<T>::TryRead(T& d) {
   

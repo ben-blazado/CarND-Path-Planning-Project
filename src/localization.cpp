@@ -67,7 +67,7 @@ void Localization::VerifyPrevPath(InputData& in) {
   }
   
   // cout << "Localization::ProcessUpdates() " << endl;
-  cout << "Localization::should be 2 or more " << in_.prev_path_x.size() << endl;
+  cout << "Localization::should be 2 or more " << in.prev_path_x.size() << endl;
   
   return;
 }
@@ -81,8 +81,6 @@ void Localization::Input (InputData& in) {
   trajectory_.Input(loc_in);
   
   // cout << "Localization last point to beh " << in.prev_path_x.back() << endl;
-  //TODO: change to out buf? as in out buf to beh?
-  //TODO: rename all reads to write?
   in_buf_.Write(in);
   
   return;
@@ -101,7 +99,8 @@ Frenet Localization::CalcLastPos() {
   Cartesian last_p = {in_.prev_path_x[last], in_.prev_path_y[last]};
   
   // covert last waypoint from cartesian point to frenet
-  Frenet last_f = map_.CalcFrenet(last_p);
+  Frenet last_f;
+  map_.CalcFrenet(last_p, last_f);
   
   // cout << "Localization::last_f " << last_f.s() << " " << last_f.d() << endl;
   
@@ -123,7 +122,8 @@ Frenet Localization::CalcLastVel(Frenet last_f) {
   Cartesian prev_last_p;
   prev_last_p.x      = in_.prev_path_x[last-1];
   prev_last_p.y      = in_.prev_path_y[last-1];
-  Frenet prev_last_f = map_.CalcFrenet(prev_last_p);
+  Frenet prev_last_f; 
+  map_.CalcFrenet(prev_last_p, prev_last_f);
   
   // Calculate ds and dd for use in calculating velocity.
   // double ds = map_.Diff (last_f.s, prev_last_f.s);
@@ -153,8 +153,9 @@ Frenet Localization::CalcLastAcc(Frenet last_v) {
   Cartesian second_p = {in_.prev_path_x[1], in_.prev_path_y[1]};
   
   // Convert first two waypoints to frenet coordinates.
-  Frenet first_f  = map_.CalcFrenet(first_p);
-  Frenet second_f = map_.CalcFrenet(second_p);
+  Frenet first_f, second_f;
+  map_.CalcFrenet(first_p, first_f);
+  map_.CalcFrenet(second_p, second_f);
   
   // Calculate initial velocity along s and d 
   // based on first and second  waypoints.
@@ -201,8 +202,8 @@ void Localization::ProcessInputs () {
       
       //test comment
       
-      Behavior::InputData beh_in = {last_f, num_waypoints};
-      behavior_.Input(beh_in);
+      Behavior::LocalizationInput loc_in = {in_.tp, last_f, num_waypoints};
+      behavior_.Input(loc_in);
     }
   }  // while
 }

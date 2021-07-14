@@ -276,10 +276,9 @@ int Map::GetStartPoint(Cartesian p) {
   return start; // closest point "behind" along reference
 }
  
-Cartesian Map::CalcCartesian(Frenet f) {
+void Map::CalcCartesian(const Frenet& f, Cartesian& p) {
   
-  Cartesian p;
-  
+  //TODO: check this condition.
   if (f.s_ >= max_s_) {
     cout << "*** f.s is greater than max_s. exiting... ***" << endl;
     exit(1);
@@ -288,10 +287,10 @@ Cartesian Map::CalcCartesian(Frenet f) {
   p.x = sx_(f.s_) + f.d_*snx_(f.s_);
   p.y = sy_(f.s_) + f.d_*sny_(f.s_);
   
-  return p;
+  return;
 }
 
-Frenet Map::CalcFrenet(Cartesian p) {
+void Map::CalcFrenet(const Cartesian& p, Frenet& f) {
   
   int    start_point = GetStartPoint(p);
   double s = maps_s_[start_point];
@@ -333,13 +332,11 @@ Frenet Map::CalcFrenet(Cartesian p) {
     
   }
   
-  Frenet f;
-  
   f.s_ = s;
   //f.s = (s > max_s_) ? Normalize(s) : s;
   f.d_ = (dx - dy) / (snx - sny);   // check for zeros?
   
-  return f;
+  return;
 }
   
 

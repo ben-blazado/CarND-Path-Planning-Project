@@ -11,6 +11,7 @@ set(sources src/main.cpp
             src/localization.cpp
 	    src/behavior.cpp
 	    src/trajectory.cpp
+	    src/prediction.cpp
 	    src/path.cpp
 	    src/map.cpp
 	    src/helpers.cpp)
