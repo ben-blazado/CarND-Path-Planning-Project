@@ -76,7 +76,6 @@ double Path::max_ds_;
 double Path::max_avg_v_s_;
 double Path::max_last_v_s_;
 
-
 // resets stats for entire class. 
 // call before calculating stats for each instance.
 void Path::ResetStats() {
@@ -94,12 +93,21 @@ void Path::ResetStats() {
 Path::Path (time_point tp, Kinematic<Frenet>& start, Kinematic<Frenet>& end, double t,
     int num_waypoints) {
       
+  tp_ = tp;
+  end_ = end;
+  
+  //Kinematic<double> start_s = {start.p.s(), start.v.s(), 0};
+  //Kinematic<double> end_s   = {end.p.s(),   end.v.s(),   0};
+
   Kinematic<double> start_s = {start.p.s(), start.v.s(), start.a.s()};
   Kinematic<double> end_s   = {end.p.s(),   end.v.s(),   end.a.s()};
   vector<double> s_coeffs = JMTCoeffs(start_s, end_s, t);
   
-  Kinematic<double> start_d = {start.p.d(), start.v.d(), start.a.d()};
-  Kinematic<double> end_d   = {end.p.d(),   end.v.d(),   end.a.d()};
+  Kinematic<double> start_d = {start.p.d(), 0, 0};
+  Kinematic<double> end_d   = {end.p.d(),   0,   0};
+
+//  Kinematic<double> start_d = {start.p.d(), start.v.d(), start.a.d()};
+//  Kinematic<double> end_d   = {end.p.d(),   end.v.d(),   end.a.d()};
   vector<double> d_coeffs = JMTCoeffs(start_d, end_d, t);
 
   // use starting position as first waypoint.
@@ -121,6 +129,7 @@ Path::Path (time_point tp, Kinematic<Frenet>& start, Kinematic<Frenet>& end, dou
     waypoints_.push_back(waypoint); 
   }
   
+  UpdateStats();
   return;
 }
 
@@ -183,6 +192,7 @@ void Path::UpdateScore() {
     score_ += w*Path::score_functions_[i].f(*this);
   }
   
+  return;
 }
 
   
@@ -213,7 +223,7 @@ vector<Path::ScoreFunction> Path::score_functions_ = {
   },
   {
     Path::LaneKeepingScore, 
-    0.109
+    0.109    
   },
   {
     Path::AverageVelocityScore, 
@@ -222,7 +232,7 @@ vector<Path::ScoreFunction> Path::score_functions_ = {
   {
     Path::LastVelocityScore,
     0.109
-  }
+  },
 };
 
 bool Path::GreaterThan(Path& p1, Path& p2) {

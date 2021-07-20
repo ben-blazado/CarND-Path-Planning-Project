@@ -67,7 +67,7 @@ void Localization::VerifyPrevPath(InputData& in) {
   }
   
   // cout << "Localization::ProcessUpdates() " << endl;
-  cout << "Localization::should be 2 or more " << in.prev_path_x.size() << endl;
+  // cout << "Localization::should be 2 or more " << in.prev_path_x.size() << endl;
   
   return;
 }
@@ -200,9 +200,8 @@ void Localization::ProcessInputs () {
       // to behavior module to generate new path.
       int num_waypoints = in_.prev_path_x.size();
       
-      //test comment
-      
-      Behavior::LocalizationInput loc_in = {in_.tp, last_f, num_waypoints};
+      time_point last_tp = in_.tp + duration(num_waypoints*dt_);
+      Behavior::LocalizationInput loc_in = {last_tp, last_f, num_waypoints};
       behavior_.Input(loc_in);
     }
   }  // while

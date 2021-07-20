@@ -49,10 +49,11 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
                      
 // Chrono helpers for timestamps in milliseconds
 typedef std::chrono::system_clock system_clock;
-typedef std::chrono::time_point<system_clock> time_point;
+typedef std::chrono::duration<double> duration; // in seconds
+typedef std::chrono::time_point<system_clock, duration> time_point;
 
 time_point TimeNow();
-double DiffTimePoint(time_point tp_f, time_point tp_i); // in seconds
+double DiffTimePoint(time_point t2, time_point t1); // in seconds
   
   
 #endif  // HELPERS_H

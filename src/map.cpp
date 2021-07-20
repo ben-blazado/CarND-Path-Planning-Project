@@ -76,6 +76,20 @@ Frenet Frenet::operator /(double divisor) {
   return q;
 }
 
+Frenet Frenet::operator *(double multiplier) {
+  Frenet prod;
+  
+  prod.s_ = s_ * multiplier;
+  if (prod.s_ >= max_s_)
+    prod.s_ = fmod (prod.s_, max_s_);
+  
+  prod.d_ = d_ * multiplier;
+  
+  return prod;
+}
+
+
+
 void Frenet::Max(Frenet f) {
   if (f.s_ > s_)
     s_ = f.s_;
@@ -204,14 +218,14 @@ double Map::Normalize(double s) {
   return fmod (s, max_s_);
 }
 
-int Map::D2Lane (double d) {
+int Map::D2Lane (double d) const {
   
   int lane = std::round ((d - 2.0) / 4.0);
   
   return lane;
 }
 
-double Map::Lane2D (int lane) {
+double Map::Lane2D (int lane) const {
   
   double d = 4.0*lane + 2.0;
   

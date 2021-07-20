@@ -30,12 +30,48 @@ class Behavior {
         double secs_per_update);
     ~Behavior();
     
+    // structure and method to receive inputs from localization module.
     struct LocalizationInput {
       time_point tp;
       Kinematic<Frenet> start;
-      int prev_num_waypoints; // TODO: is this needed?
+      int prev_num_waypoints;
     };
-    void Input(LocalizationInput& in);
+    void Input(const LocalizationInput& in);
+    
+    struct Car {
+      Frenet p;
+      Frenet v;
+    };
+    // structure and method to receive inputs from prediction module.
+    struct PredictionOutput {
+      time_point tp;
+      vector<Car> other_cars;
+      /*
+      PredictionInput& operator=(const PredictionInput& pre_rhs) {
+        tp = pre_rhs.tp;
+        predictions.clear();
+        for (int i = 0; i < pre_rhs.predictions.size(); i ++)
+          predictions.push_back(pre_rhs.predictions[i]);
+        return *this;
+      }
+      */
+    };
+    
+    /*
+    struct PredictionInput {
+      time_point tp;
+      vector<vector<Frenet>> predictions;
+      PredictionInput& operator=(const PredictionInput& pre_rhs) {
+        tp = pre_rhs.tp;
+        predictions.clear();
+        for (int i = 0; i < pre_rhs.predictions.size(); i ++)
+          predictions.push_back(pre_rhs.predictions[i]);
+        return *this;
+      }
+     
+    };
+    */
+    void Input(const PredictionOutput& pre_out);
     
     void Run();
       
@@ -51,27 +87,17 @@ class Behavior {
     bool  processing_;
     thread thread_;
     
-    LocalizationInput         loc_in_;
     Buffer<LocalizationInput> loc_in_buf_;
+    Buffer<PredictionOutput>   pre_in_buf_;
     
-    void GeneratePaths();
+    void GeneratePaths(LocalizationInput loc_in, PredictionOutput pre_out);
+    bool Valid(Kinematic<Frenet> goal, LocalizationInput loc_in, 
+            PredictionOutput pre_out);
     void ScorePaths();
     vector<vector<Frenet>> SortedWaypoints();
     vector<Path> paths_;
     
     void ProcessInputs();
-    
-    //SelectBestState();
-    
-    //int max_lanes_;
-    //int max_secs_;
-    
-    //vector<double> speed_options_(3);
-    //enum class SpeedOption {
-    //  kStop,
-    //  kMaintain,
-    //  kMaxLane
-    //};
     
 };
 

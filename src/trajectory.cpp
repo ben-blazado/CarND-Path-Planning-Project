@@ -70,13 +70,14 @@ bool Trajectory::FrenetToCartesian(const vector<Frenet>& f_waypoints,
       double v = d / secs_per_update_;
       
       // invalidate waypoints if v exceeds max_v
-      if (v >= max_v_) {
+      if ((v >= max_v_) or (v <= 0)){
         valid = false;
         break;
       }
     }
   }
   
+  //TODO: fix later
   return valid;
 }
 
@@ -89,18 +90,33 @@ void Trajectory::ProcessInputs () {
 
     if (beh_in_buf_.TryRead(beh_in_)) {
       
+      bool selected = false;
       for (int i = 0; i < beh_in_.sorted_waypoints.size(); i ++) {
 
         vector<Cartesian> waypoints;
         
+        
         // convert frenet waypoints (from behavior module) to cartesian.
         if (FrenetToCartesian(beh_in_.sorted_waypoints[i], waypoints)) {
+          selected = true;
+          // cout << "selected trajectory " << i << " of " << beh_in_.sorted_waypoints.size() << endl;
+          double last_d = beh_in_.sorted_waypoints[i].back().d();
+          static int lane = map_.D2Lane(last_d);
+          if (lane != map_.D2Lane(last_d)) {
+            lane = map_.D2Lane(last_d);
+            cout << "Changing lane " << lane << endl;
+          }
+          
           wp_buf_.Write(waypoints);
           break;
         } 
-        else
+        else {
+          // cout << "trajectory " << i << " not selected." << endl;
           waypoints.clear();
+        }
       }  // for
+      if (not selected) 
+        cout << "no paths selected " << endl;
     } // if
     
     // TODO: is this neded?
@@ -140,17 +156,20 @@ bool Trajectory::Output(OutputData& out) {
         start_idx = i;
         break;
       }
+      
+  //if (new_waypoints.size() == 0)
+  //  cout << "traj output new waypoints size is zero" << endl;
 
   // if the last_p was found in new_waypoints, use new_waypoints
   // as the trajectory to add to next_x and next_y vals starting at start_idx.
   // if last_p was not found, then use the old waypoints.
-  static vector<Cartesian> old_waypoints;
   vector<Cartesian> waypoints;
+  static vector<Cartesian> old_waypoints;
   if (start_idx >= 0) 
     waypoints = {new_waypoints.begin() + start_idx, new_waypoints.end()};
   else {
     waypoints = old_waypoints;
-    cout << "Old waypoints left " << waypoints.size() << endl;
+    // cout << "Old waypoints left " << waypoints.size() << endl;
   }
 
   // add the waypoints to next_x and next_y vals.
@@ -172,6 +191,9 @@ bool Trajectory::Output(OutputData& out) {
     old_waypoints = {waypoints.begin() + num_waypoints - 1, waypoints.end()};
   }
   
+  // cout << "trajectory next x vals size " << out.next_x_vals.size() << endl;
+  if (out.next_x_vals.size() == 0)
+    cout << "next path is exhausted" << endl;
   // TODO: remove true, make method a void.
   return true;
 }

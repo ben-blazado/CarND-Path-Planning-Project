@@ -64,16 +64,23 @@ int main() {
   }
   
   // blazado: module initizalization
-  double secs_per_update = 0.02;
-  double max_plan_secs   = 3.0;  // planning horizon.
-  double max_exe_secs    = 0.2;  // execution horizon.
-  double max_v           = 22.240; //22.128; // in meters/sec. about 49.5 mph
   
+  // path_planning parameters
+  double secs_per_update = 0.02;
+  double plan_secs       = 3.0;  // planning horizon.
+  double exe_secs        = 0.2;  // execution horizon.
+  double prediction_secs = 1.0;  // prediction_secs
+  double max_v           = 22.240; //22.128; // in meters/sec. about 49.5 mph
+  double near_distance   = 30;
+  
+  // TODO: change max_secs to plan_secs for all classes.
+  // TODO: change exe_secs to appropriate name for for trajectory.
   Map          map(map_waypoints_s, map_waypoints_x, map_waypoints_y,
                    map_waypoints_dx, map_waypoints_dy, max_s);
-  Trajectory   trajectory(map, max_exe_secs, secs_per_update, max_v);
-  Behavior     behavior(trajectory, map, max_plan_secs, secs_per_update);
-  Prediction   prediction;
+  Trajectory   trajectory(map, exe_secs, secs_per_update, max_v);
+  Behavior     behavior(trajectory, map, plan_secs, secs_per_update);
+  Prediction   prediction(behavior, map, prediction_secs, secs_per_update, 
+                  near_distance);
   Localization localization(behavior,trajectory, map, secs_per_update);
     
   localization.Run();
@@ -81,7 +88,7 @@ int main() {
   behavior.Run();
   trajectory.Run();
   
-  //https://stackoverflow.com/questions/5395309/how-do-i-force-cmake-to-include-pthread-option-during-compilation
+  // https://stackoverflow.com/questions/5395309/how-do-i-force-cmake-to-include-pthread-option-during-compilation
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy,&localization,&trajectory,
@@ -138,7 +145,7 @@ int main() {
               previous_path_x, previous_path_y};
           localization.Input(loc_in);
           
-          Prediction::InputData pre_in = {tp, sensor_fusion};
+          Prediction::InputData pre_in = {tp, car_x, car_y, sensor_fusion};
           prediction.Input(pre_in);
             
           Trajectory::OutputData tra_out;

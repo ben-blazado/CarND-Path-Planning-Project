@@ -19,11 +19,11 @@ class Buffer {
     bool TryRead(T& d);
     bool Read(T& d);    
     bool ReadDirty(T& d);    
+    T data_;
     
   private:
   
     mutex m_;
-    T data_;
     bool updated_;
 };
 

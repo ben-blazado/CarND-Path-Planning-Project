@@ -27,13 +27,16 @@ class Frenet{
     Frenet();
     Frenet(double s, double d);
 
-    double s() { return s_; };
-    double d() { return d_; };
+    double s() const { return s_; };
+    double d() const { return d_; };
+    void d(double d) { d_ = d; };
   
     Frenet operator =(Frenet f);
     Frenet operator +(Frenet f);
     Frenet operator -(Frenet f);
     Frenet operator /(double divisor);
+    Frenet operator *(double multiplier);
+
     void Max(Frenet f);
   
   protected:
@@ -84,8 +87,8 @@ class Map {
     double Diff(double s2, double s1);
     double Normalize(double s);
     
-    double Lane2D(int lane);
-    int D2Lane(double d);
+    double Lane2D(int lane) const;
+    int D2Lane(double d) const;
         
   private:
   

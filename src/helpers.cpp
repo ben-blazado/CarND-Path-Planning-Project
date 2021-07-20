@@ -162,6 +162,7 @@ time_point TimeNow() {
   return system_clock::now();
 }
 
+// returns the difference between two timepoints in seconds.
 double DiffTimePoint(time_point t2, time_point t1) {
   
   using std::chrono::duration_cast;
