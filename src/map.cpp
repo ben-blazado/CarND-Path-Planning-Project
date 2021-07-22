@@ -69,6 +69,7 @@ Frenet Frenet::operator -(Frenet f) {
   return diff;
 }
 
+
 Frenet Frenet::operator /(double divisor) {
   Frenet q;
   q.s_ = s_ / divisor;
@@ -167,7 +168,7 @@ void Origin::Restore(double& angle) {
 Map::Map(vector<double>& maps_s, 
     vector<double>& maps_x, vector<double>& maps_y, 
     vector<double>& maps_nx, vector<double>& maps_ny, 
-    double max_s) : 
+    double max_s, int num_lanes) : 
     maps_s_(maps_s), 
     maps_x_(maps_x),
     maps_y_(maps_y),
@@ -189,6 +190,7 @@ Map::Map(vector<double>& maps_s,
   sny_ = spline(maps_s_, maps_ny_);
   
   max_s_ = max_s;
+  num_lanes_ = num_lanes;
   
   Frenet::max_s_ = max_s;
   Frenet::half_max_s_ = max_s/2;
@@ -220,9 +222,17 @@ double Map::Normalize(double s) {
 
 int Map::D2Lane (double d) const {
   
-  int lane = std::round ((d - 2.0) / 4.0);
+  //int lane = std::round ((d - 2.0) / 4.0);
+  if (d < 4.0)
+    return 0;
+  else if (d < 8.0)
+    return 1;
+  else if (d < 12.0)
+    return 2;
+  else 
+    return 3;
   
-  return lane;
+  //return lane;
 }
 
 double Map::Lane2D (int lane) const {
@@ -230,6 +240,12 @@ double Map::Lane2D (int lane) const {
   double d = 4.0*lane + 2.0;
   
   return d;
+}
+
+
+int Map::num_lanes() const {
+  
+  return num_lanes_;
 }
 
 // Returns an index to maps_s where s in [maps_s[i], maps_s[i++]).

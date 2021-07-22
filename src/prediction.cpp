@@ -2,11 +2,13 @@
 #include "map.h"
 
 #include <iostream>
+#include <cfloat>
 
 namespace PathPlanning {
   
 using std::cout;
 using std::endl;
+using std::fill;
 
 
 Prediction::Prediction (Behavior& behavior, Map& map, double prediction_secs, 
@@ -47,23 +49,45 @@ void Prediction::Input (InputData& in) {
 void Prediction::SelectCarsNearby(const double car_x, const double car_y, 
     const vector<vector<double>>& sensor_fusion, 
     vector<vector<double>>& cars_nearby) {
+
+  const Cartesian& car_p = {car_x, car_y};
+  Frenet car_f;
+  map_.CalcFrenet(car_p, car_f);
+  
+  double rear_buffer_dist = 15.0;
+  Frenet base = car_f - Frenet(rear_buffer_dist, 0);
       
-  //cout << "car x " << car_x << endl;
-  cars_nearby.clear();
+  vector<double> car_distances(map_.num_lanes());
+  fill(car_distances.begin(), car_distances.end(), DBL_MAX);
+  
+  vector<int> closest_cars(map_.num_lanes());
+  fill(closest_cars.begin(), closest_cars.end(), -1);
   
   //cout << "SelectCarsNearby sensor_fusion size " << sensor_fusion.size() << endl;
   for (int i = 0; i < sensor_fusion.size(); i ++) {
     const vector<double>& other_car = sensor_fusion[i];
-    const double& other_car_x = other_car[1];
-    const double& other_car_y = other_car[2];
+    const Cartesian other_car_p = {other_car[1], other_car[2]};
     
-    const double dist = distance (car_x, car_y, other_car_x, other_car_y);
-    //cout << "other car x " << other_car_x << endl;
-    if (dist < near_distance_)
-      cars_nearby.push_back(other_car);
+    Frenet other_car_f;
+    map_.CalcFrenet(other_car_p, other_car_f);
+    int other_car_lane = map_.D2Lane(other_car_f.d());
+    
+    if ((0 <= other_car_lane) and (other_car_lane < map_.num_lanes())) {
+      double s_dist = other_car_f.s() - base.s();
+      if ((0 < s_dist) and (s_dist < near_distance_) 
+            and (s_dist < car_distances[other_car_lane])) {
+        car_distances[other_car_lane] = s_dist;
+        closest_cars[other_car_lane] = i;
+      }
+    }
   }
   
-  // cout << "cars nearby " << cars_nearby.size() << endl;
+  cars_nearby.clear();
+  for (int i = 0; i < closest_cars.size(); i ++) {
+    int car_idx = closest_cars[i];
+    if (car_idx >= 0) 
+      cars_nearby.push_back(sensor_fusion[car_idx]);
+  }
   
   return;
 }
@@ -133,7 +157,6 @@ void Prediction::ProcessInputs() {
       
       Behavior::PredictionOutput pre_out;
       CreateOutput (in.tp, cars_nearby, pre_out);
-      // cout << "prediction module size " << pre_in.predictions.size() << endl;
       behavior_.Input(pre_out);
       
     }

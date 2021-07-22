@@ -70,13 +70,14 @@ int main() {
   double plan_secs       = 3.0;  // planning horizon.
   double exe_secs        = 0.2;  // execution horizon.
   double prediction_secs = 1.0;  // prediction_secs
-  double max_v           = 22.240; //22.128; // in meters/sec. about 49.5 mph
-  double near_distance   = 30;
+  double max_v           = 21.905; //22.128; // in meters/sec. about 49.5 mph
+  double near_distance   = 45;
+  int    num_lanes       = 3;
   
   // TODO: change max_secs to plan_secs for all classes.
   // TODO: change exe_secs to appropriate name for for trajectory.
   Map          map(map_waypoints_s, map_waypoints_x, map_waypoints_y,
-                   map_waypoints_dx, map_waypoints_dy, max_s);
+                   map_waypoints_dx, map_waypoints_dy, max_s, num_lanes);
   Trajectory   trajectory(map, exe_secs, secs_per_update, max_v);
   Behavior     behavior(trajectory, map, plan_secs, secs_per_update);
   Prediction   prediction(behavior, map, prediction_secs, secs_per_update, 

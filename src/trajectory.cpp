@@ -70,7 +70,7 @@ bool Trajectory::FrenetToCartesian(const vector<Frenet>& f_waypoints,
       double v = d / secs_per_update_;
       
       // invalidate waypoints if v exceeds max_v
-      if ((v >= max_v_) or (v <= 0)){
+      if (v >= max_v_) {
         valid = false;
         break;
       }
@@ -95,7 +95,6 @@ void Trajectory::ProcessInputs () {
 
         vector<Cartesian> waypoints;
         
-        
         // convert frenet waypoints (from behavior module) to cartesian.
         if (FrenetToCartesian(beh_in_.sorted_waypoints[i], waypoints)) {
           selected = true;
@@ -106,7 +105,6 @@ void Trajectory::ProcessInputs () {
             lane = map_.D2Lane(last_d);
             cout << "Changing lane " << lane << endl;
           }
-          
           wp_buf_.Write(waypoints);
           break;
         } 
@@ -115,8 +113,26 @@ void Trajectory::ProcessInputs () {
           waypoints.clear();
         }
       }  // for
-      if (not selected) 
+      if (not selected) {
         cout << "no paths selected " << endl;
+        if (beh_in_.sorted_waypoints.size() > 0) {
+          //double check
+          for (int i = 0; i < beh_in_.sorted_waypoints.size(); i ++) {
+            vector<Cartesian> waypoints;
+            // convert frenet waypoints (from behavior module) to cartesian.
+            if (FrenetToCartesian(beh_in_.sorted_waypoints[i], waypoints)) {
+              selected = true;
+              cout << "there is 1 path that is valid but no paths were selected." << endl;
+              exit (0);
+            }
+            else {
+              // cout << "trajectory " << i << " not selected." << endl;
+              waypoints.clear();
+            }
+          }
+          cout << "    received num paths from beh " << beh_in_.sorted_waypoints.size() << endl;
+        }
+      }
     } // if
     
     // TODO: is this neded?

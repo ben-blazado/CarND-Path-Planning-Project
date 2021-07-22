@@ -49,29 +49,93 @@ void Behavior::Input(const PredictionOutput& pre_out) {
 }
 
 
-bool Behavior::Valid(Kinematic<Frenet> goal, 
+bool Behavior::Valid(Kinematic<Frenet>& goal, 
     LocalizationInput loc_in, PredictionOutput pre_out)
 {
   bool valid = true;
   
   duration dt = loc_in.tp - pre_out.tp;
   double t = dt.count();
+  // cout << "valid t " << t << " secs " << endl;
   
+  double curr_pos   = loc_in.start.p.s();
+  double curr_speed = loc_in.start.v.s();
+  int curr_lane = map_.D2Lane(loc_in.start.p.d());
   int goal_lane = map_.D2Lane(goal.p.d());
-  int goal_speed = goal.v.s();
+  double goal_pos = goal.p.s();
+  double goal_speed = goal.v.s();
+  double goal_acc = goal.a.s();
   
   for (int i = 0; (i < pre_out.other_cars.size()); i ++) {
     
     Car car = pre_out.other_cars[i];
-
     // check if other car in front
     Frenet p = {car.p + car.v*t};
-    if ((p.s() > loc_in.start.p.s())              // other car in front
-        and (goal_lane == map_.D2Lane(car.p.d())) // same lane
-        and (goal_speed > car.v.s())) {           // goal is faster than car
+    int car_lane = map_.D2Lane(car.p.d());
+    
+    if ((goal_lane != curr_lane) 
+      and ((p.s() - curr_pos) < 15)
+      and (curr_lane == car_lane)) {
       valid = false;
       break;
     }
+    
+    if ((goal_lane < curr_lane)
+        and (fabs (p.s() - loc_in.start.p.s()) < 12.5) 
+        and (map_.D2Lane(car.p.d()) - curr_lane == -1)) {
+      valid = false;
+      break;
+    }
+    
+    if ((goal_lane > curr_lane)
+        and (fabs (p.s() - loc_in.start.p.s()) < 12.5) 
+        and (map_.D2Lane(car.p.d()) - curr_lane == 1)) {
+      valid = false;
+      break;
+    }
+    
+    //TODO: select closest car in lane
+    if ((goal_lane == car_lane) // same lane
+        //and (curr_lane == car_lane) // same lane
+        and ((curr_speed > car.v.s()) or (goal.v.s() > car.v.s()))) {           // goal is faster than car
+      double dt = 3;
+      double target_v;
+      if (p.s() - loc_in.start.p.s() < 15)      
+          target_v = car.v.s() - 2.5;
+      else
+          target_v = car.v.s();
+      goal.v = {target_v, goal.v.d()};
+      goal.a = {0, goal.a.d()};
+      double ds = target_v*dt + 0.5*goal.a.s()*dt*dt;       
+      goal.p = {loc_in.start.p.s() + ds, goal.p.d()};
+      // cout << "curr speed " << curr_speed << " other car " << car.v.s() << endl;
+      break;
+    }
+
+    /*
+    //TODO: select closest car in lane
+    if ((goal_lane != curr_lane) // same lane
+        and (goal_lane == car_lane) // same lane
+        and (goal.v.s() > car.v.s())) {           // goal is faster than car
+      double dt = 3;
+      goal.v = {car.v.s(), goal.v.d()};
+      goal.a = {0, goal.a.d()};
+      double ds = car.v.s()*dt + 0.5*goal.a.s()*dt*dt;       
+      goal.p = {loc_in.start.p.s() + ds, goal.p.d()};
+      cout << "collision imminent " << curr_speed << " " << car.v.s() << endl;
+      break;
+    }
+    */
+
+    //if ((p.s() > loc_in.start.p.s())              // other car in front
+    //    and (goal_pos > p.s() + 3*car.v.s() - 10)
+    //    and (goal_lane == map_.D2Lane(car.p.d()))) { // same lane
+    //  valid = false;
+    //  break;
+    //}
+
+    
+    
   }
       
   return valid;
@@ -90,7 +154,7 @@ void Behavior::GeneratePaths(LocalizationInput loc_in,
   const double  tdiv2 = 0.5*t;
   const double  num_waypoints = max_waypoints_ - loc_in.prev_num_waypoints;
   
-  for (double a = -10; a <= 5; a += (a < 0 ? 1.0 : 0.125)) {
+  for (double a = -10; a <= 5; a += (a < 0 ? 1 : 0.125)) {
     
     // acceleration, a, multiplied by time, t.
     double at = a*t;
@@ -106,7 +170,7 @@ void Behavior::GeneratePaths(LocalizationInput loc_in,
     if (ds < 0)
       continue;
 
-    for (int lane = 0; lane < 3; lane ++) {
+    for (int lane = 0; lane < map_.num_lanes(); lane ++) {
     
       // okay if s > max_s because s gets normalized in calc_xy
       // ensures that the end d is in middle of current lane
@@ -181,7 +245,7 @@ void Behavior::ProcessInputs () {
     pre_in_ready = pre_in_buf_.TryRead(pre_out) or pre_in_ready;
     //cout << "pre in " << endl;
     
-    if (loc_in_ready and pre_in_ready) {
+    if (loc_in_ready and pre_in_ready or true) {
       
       // cout << "Behavoir::input s d" << in_.start.p.s() << " " << in_.start.p.d() << endl;
       // cout << "cars nearby " << pre_in.predictions.size() << endl;
@@ -198,6 +262,8 @@ void Behavior::ProcessInputs () {
       loc_in_ready = false;
       pre_in_ready = false;
     }
+    else
+      cout << "loc and or pre not ready>" << endl;
   } 
   
   return;

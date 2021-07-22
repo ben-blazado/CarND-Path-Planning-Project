@@ -78,7 +78,8 @@ class Map {
   public:
   
     Map (vector<double>& maps_s, vector<double>& maps_x, vector<double>& maps_y, 
-        vector<double>& maps_nx, vector<double>& maps_ny, double max_s);
+        vector<double>& maps_nx, vector<double>& maps_ny, 
+        double max_s, int num_lanes);
     
     void CalcCartesian (const Frenet& f, Cartesian& p);
     void CalcFrenet    (const Cartesian& p, Frenet& f);
@@ -89,10 +90,10 @@ class Map {
     
     double Lane2D(int lane) const;
     int D2Lane(double d) const;
+    int num_lanes() const;
         
   private:
   
-
     int GetStartPoint(double s);
     int GetStartPoint(Cartesian p);
 
@@ -104,6 +105,7 @@ class Map {
     
     int    num_map_points_;
     double max_s_;
+    int    num_lanes_;
     
     spline sx_;
     spline sy_;

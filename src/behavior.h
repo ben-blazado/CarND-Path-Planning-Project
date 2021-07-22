@@ -91,7 +91,7 @@ class Behavior {
     Buffer<PredictionOutput>   pre_in_buf_;
     
     void GeneratePaths(LocalizationInput loc_in, PredictionOutput pre_out);
-    bool Valid(Kinematic<Frenet> goal, LocalizationInput loc_in, 
+    bool Valid(Kinematic<Frenet>& goal, LocalizationInput loc_in, 
             PredictionOutput pre_out);
     void ScorePaths();
     vector<vector<Frenet>> SortedWaypoints();

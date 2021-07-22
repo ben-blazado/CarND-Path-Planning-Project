@@ -219,19 +219,19 @@ double Path::LastVelocityScore(Path &path) {
 vector<Path::ScoreFunction> Path::score_functions_ = {
   {
     Path::DistanceScore, 
-    0.572
+    0.65
   },
   {
     Path::LaneKeepingScore, 
-    0.109    
+    0.15
   },
   {
     Path::AverageVelocityScore, 
-    0.209
+    0.15
   },
   {
     Path::LastVelocityScore,
-    0.109
+    0.05    
   },
 };
 
