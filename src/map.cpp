@@ -238,6 +238,9 @@ int Map::D2Lane (double d) const {
 double Map::Lane2D (int lane) const {
   
   double d = 4.0*lane + 2.0;
+  if (lane == 2)
+    d = 9.8; //  9.75; good
+  
   
   return d;
 }

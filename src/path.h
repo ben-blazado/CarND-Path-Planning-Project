@@ -10,7 +10,7 @@ using std::vector;
   
 class Path {
   
-  //friend class Behavior;
+  friend class Behavior;
   
   public:
 
@@ -34,6 +34,7 @@ class Path {
     //void         GetXYVals(vector<double>& x_vals, vector<double>& y_vals);
   private:
   
+    static Map& map_;
     static double secs_per_update_; 
     
     static double max_dd_;

@@ -7,6 +7,8 @@ namespace PathPlanning {
 using std::cout;
 using std::endl;
 using std::sort;
+using std::min;
+using std::max;
 
 Behavior::Behavior (Trajectory& trajectory, Map& map, double max_plan_secs, 
     double secs_per_update) 
@@ -54,63 +56,188 @@ bool Behavior::Valid(Kinematic<Frenet>& goal,
 {
   bool valid = true;
   
-  duration dt = loc_in.tp - pre_out.tp;
-  double t = dt.count();
+  duration dur_secs = loc_in.tp - pre_out.tp;
+  double t_ahead = dur_secs.count();
   // cout << "valid t " << t << " secs " << endl;
   
   double curr_pos   = loc_in.start.p.s();
   double curr_speed = loc_in.start.v.s();
-  int curr_lane = map_.D2Lane(loc_in.start.p.d());
-  int goal_lane = map_.D2Lane(goal.p.d());
-  double goal_pos = goal.p.s();
-  double goal_speed = goal.v.s();
-  double goal_acc = goal.a.s();
+  double curr_acc   = loc_in.start.a.s();
+  int    curr_lane  = map_.D2Lane(loc_in.start.p.d());
+  
+  const double goal_pos   = goal.p.s();
+  const double goal_speed = goal.v.s();
+  const double goal_acc   = goal.a.s();
+  const int    goal_lane  = map_.D2Lane(goal.p.d());
   
   for (int i = 0; (i < pre_out.other_cars.size()); i ++) {
     
     Car car = pre_out.other_cars[i];
-    // check if other car in front
-    Frenet p = {car.p + car.v*t};
-    int car_lane = map_.D2Lane(car.p.d());
+    double other_car_speed = car.v.s();
+    double other_car_pos = car.p.s(); 
+        + other_car_speed*t_ahead; // position sycronized to localizer time
+    int other_car_lane = map_.D2Lane(car.p.d());
+    double t_plan = 2.0;
     
-    if ((goal_lane != curr_lane) 
-      and ((p.s() - curr_pos) < 15)
-      and (curr_lane == car_lane)) {
+    //double max_decel = min (curr_speed/t_plan, 7.5);
+    //double relative_speed = curr_speed - other_car_speed;
+    double max_decel = 10.0;
+    double breaking_distance = curr_speed*curr_speed / (2*max_decel);
+    //double breaking_distance = curr_speed*t_plan - 0.5*max_decel*t_plan*t_plan;
+    double safe_distance = breaking_distance * 1.75;
+    
+    // car in left lane in front going slower or in back going faster
+    if ((goal_lane <= other_car_lane) and (other_car_lane < curr_lane)     
+//    if ((goal_lane != curr_lane)
+//        and (other_car_lane == goal_lane)
+        and ((other_car_pos > curr_pos) and (other_car_speed < curr_speed)
+             or (other_car_pos < curr_pos) and (other_car_speed > curr_speed))) {
       valid = false;
       break;
     }
     
-    if ((goal_lane < curr_lane)
-        and (fabs (p.s() - loc_in.start.p.s()) < 12.5) 
-        and (map_.D2Lane(car.p.d()) - curr_lane == -1)) {
+    // car in left lane in front going slower or in back going faster than goal
+    if ((goal_lane <= other_car_lane) and (other_car_lane < curr_lane)     
+//    if ((goal_lane != curr_lane)
+//        and (other_car_lane == goal_lane)
+        and ((other_car_pos > curr_pos) and (other_car_speed < goal_speed)
+             or (other_car_pos < curr_pos) and (other_car_speed > goal_speed))) {
       valid = false;
       break;
     }
     
-    if ((goal_lane > curr_lane)
-        and (fabs (p.s() - loc_in.start.p.s()) < 12.5) 
-        and (map_.D2Lane(car.p.d()) - curr_lane == 1)) {
+    // car in right lane in front going slower or in back going faster
+    if ((curr_lane < other_car_lane) and (other_car_lane <= goal_lane)
+//    if ((goal_lane != curr_lane)
+//        and (other_car_lane == goal_lane)
+        and ((other_car_pos > curr_pos) and (other_car_speed < curr_speed)
+             or (other_car_pos < curr_pos) and (other_car_speed > curr_speed))) {
       valid = false;
       break;
     }
     
+    // car in right lane in front going slower or in back going faster than goal
+    if ((curr_lane < other_car_lane) and (other_car_lane <= goal_lane)
+//    if ((goal_lane != curr_lane)
+//        and (other_car_lane == goal_lane)
+        and ((other_car_pos > curr_pos) and (other_car_speed < goal_speed)
+             or (other_car_pos < curr_pos) and (other_car_speed > goal_speed))) {
+      valid = false;
+      break;
+    }
+    
+
+    /*
+    // goal speed in other lane is faster than car speed
+    // we only change lanes at same speed or slower
+    if ((goal_lane != curr_lane)
+        and (goal_speed > other_car_speed)
+        and (other_car_lane == goal_lane)
+        and (other_car_pos > curr_pos)) {
+      valid = false;
+      break;
+    }
+    */
+    
+    // car in front too close for lane change
+    //if ((goal_lane != curr_lane) and (other_car_lane == curr_lane) and (other_car_pos > curr_pos)) {
+    //  double s_dist = other_car_pos - curr_pos;
+    //  double s_future_dist = (other_car_pos + other_car_speed*t_plan) - (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan);
+    // if ((0 <= s_dist) and (s_dist <= 7.5) or (s_future_dist <= 7.5)) { //TODO: set as constant offsets
+        //valid = false;
+        //break;
+    //  }
+    //}
+
+    // car on left preventing lane change to left
+    if ((goal_lane <= other_car_lane) and (other_car_lane < curr_lane)) {
+      double s_dist = other_car_pos - curr_pos;
+      double s_future_dist = (other_car_pos + other_car_speed*t_plan) - goal_pos;
+      //if ((-10.0 <= s_dist) and (s_dist <= 10.0)) {
+          //or (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan > (other_car_pos + other_car_speed*t_plan) - safe_distance)) {
+      if (((-12 <= s_dist) and (s_dist <= 12)) or ((-12 <= s_future_dist) and (s_future_dist <= 12))) { //TODO: set as constant offsets
+        valid = false;
+        break;
+      }
+    }
+    
+    // car on right preventing lane change to right
+    if ((curr_lane < other_car_lane) and (other_car_lane <= goal_lane)) {
+      double s_dist = other_car_pos - curr_pos;
+      double s_future_dist = (other_car_pos + other_car_speed*t_plan) - goal_pos;
+      // ((-12.0 <= s_dist) and (s_dist <= 12.0)) {
+          // or (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan > (other_car_pos + other_car_speed*t_plan) - safe_distance)) {
+      if (((-12 <= s_dist) and (s_dist <= 12)) or ((-12 <= s_future_dist) and (s_future_dist <= 12))) { //TODO: set as constant offsets
+        valid = false;
+        break;
+      }
+    }
+
+    if ((goal_lane == other_car_lane) and (other_car_lane == curr_lane) // other car in goal lane
+        and (curr_pos < other_car_pos) // other car in front
+        and (goal_speed > 0.4*other_car_speed)
+        //and (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan > (other_car_pos + other_car_speed*t_plan) - safe_distance)) { // faster than other car
+        and (goal_pos > (other_car_pos + other_car_speed*t_plan) - safe_distance)) { // faster than other car
+      if (goal_lane != curr_lane) {
+        //valid = false;
+        //break;
+      }
+      cout << "car ahead " << other_car_pos - curr_pos << " " << curr_speed << endl;
+      //cout << "car ahead " << other_car_pos - curr_pos << " " << goal_acc << endl;
+      valid = false;
+      break;
+      
+      /*
+      cout << "car ahead " << other_car_pos - curr_pos << endl;
+      double target_a = (curr_speed - other_car_speed) / t_plan;
+      double target_v;
+      if (target_a < max_decel)
+        target_v = other_car_speed;
+      else
+        target_v = curr_speed - max_decel*t_plan;
+      goal.v = {target_v, goal.v.d()};
+      //double new_goal_speed = std::max (curr_speed - 7.5*t_plan, other_car_speed);
+      //goal.v = {new_goal_speed, goal.v.d()};
+      goal.a = {0, 0};
+      //double new_goal_pos = other_car_pos + other_car_speed*t_plan - safe_distance;
+      //double new_goal_pos = curr_pos + curr_speed*t_plan - 0.5*max_decel*t_plan*t_plan;
+      double new_goal_pos = curr_pos + curr_speed * t_plan - 0.5*(curr_speed - other_car_speed)*t_plan*t_plan;
+      //goal_pos = other_car_next_pos - min(other_car_next_pos - curr_pos, 15.0);
+      goal.p = {new_goal_pos, goal.p.d()}; //TODO: set const 15 offset
+      // cout << "curr speed " << curr_speed << " other car " << car.v.s() << endl;
+      // (15 - 0.5*goal.a.s()*dt*dt) / dt = target_v;             
+      */
+    }
+    
+    /*
     //TODO: select closest car in lane
     if ((goal_lane == car_lane) // same lane
         //and (curr_lane == car_lane) // same lane
-        and ((curr_speed > car.v.s()) or (goal.v.s() > car.v.s()))) {           // goal is faster than car
+        and ((curr_speed > car.v.s()) or (goal.v.s() > car.v.s()) or (p.s() - loc_in.start.p.s() < 25.0))) {           // goal is faster than car
       double dt = 3;
       double target_v;
-      if (p.s() - loc_in.start.p.s() < 15)      
-          target_v = car.v.s() - 2.5;
-      else
+      double a;
+      if ((p.s() - loc_in.start.p.s() < 25.0)  and (curr_speed > target_v) and false) {
+          target_v = curr_speed - 3.0;
+          a = (target_v - curr_speed) / dt;
+      }
+      else {
           target_v = car.v.s();
+          a = (target_v - curr_speed) / dt;
+      }
       goal.v = {target_v, goal.v.d()};
       goal.a = {0, goal.a.d()};
-      double ds = target_v*dt + 0.5*goal.a.s()*dt*dt;       
+      double ds = curr_speed*dt + 0.5*a*dt*dt;
+      
+      if (ds < 0)
+        cout << "*** DS is less than ZERo!!! ***" << endl;
       goal.p = {loc_in.start.p.s() + ds, goal.p.d()};
       // cout << "curr speed " << curr_speed << " other car " << car.v.s() << endl;
       break;
+      
+      // (15 - 0.5*goal.a.s()*dt*dt) / dt = target_v;             
     }
+    */
 
     /*
     //TODO: select closest car in lane
@@ -133,8 +260,6 @@ bool Behavior::Valid(Kinematic<Frenet>& goal,
     //  valid = false;
     //  break;
     //}
-
-    
     
   }
       
@@ -154,21 +279,25 @@ void Behavior::GeneratePaths(LocalizationInput loc_in,
   const double  tdiv2 = 0.5*t;
   const double  num_waypoints = max_waypoints_ - loc_in.prev_num_waypoints;
   
-  for (double a = -10; a <= 5; a += (a < 0 ? 1 : 0.125)) {
-    
+  for (double a = -10; a <= 5; a += (a < 0 ? 0.5 : 0.125)) {
+  //for (double end_v_s = max(0.0, v_s - 7.5*t); end_v_s <= min (v_s + 7.5*t, 22.128); end_v_s += 2.2128) {
     // acceleration, a, multiplied by time, t.
     double at = a*t;
 
     double end_v_s = v_s + at;
     //cout << "start v " << v_s << endl;
-    if (end_v_s < 0) {
+    //if (end_v_s < 0) {
       // don't create a path that goes in reverse.
       // cout << "negative path." << endl;
-      continue;
-    }
-    double ds = v_s*t + 0.5*a*t*t; 
+      //continue;
+    //}
+    //double a = (end_v_s - v_s) / t;
+    
+    double ds = v_s*t + 0.5*at*t; 
     if (ds < 0)
       continue;
+    
+    //cout << end_v_s << " " << a << " " << ds << endl;
 
     for (int lane = 0; lane < map_.num_lanes(); lane ++) {
     
@@ -179,7 +308,7 @@ void Behavior::GeneratePaths(LocalizationInput loc_in,
       Kinematic<Frenet> goal;
       goal.p = {loc_in.start.p.s() + ds, map_.Lane2D(lane)};
       goal.v = {end_v_s, 0};
-      goal.a = {a, 0};
+      goal.a = {0, 0};
       
       if (Valid(goal, loc_in, pre_out)) {
         Path path(loc_in.tp, loc_in.start, goal, t, max_waypoints_);

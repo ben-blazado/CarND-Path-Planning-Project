@@ -8,6 +8,7 @@ namespace PathPlanning {
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using std::abs;
+using std::min;
 using std::max;
 using std::cout;
 using std::endl;
@@ -66,9 +67,7 @@ vector<double> JMTCoeffs(Kinematic<double> &start, Kinematic<double> &end,
   return {start.p, start.v, start.a/2.0, A_vec[0], A_vec[1], A_vec[2]};
 }
 
-
 double Path::secs_per_update_;
-
 
 // class stats. used in calculating scores per path instance.
 double Path::max_dd_;
@@ -122,6 +121,10 @@ Path::Path (time_point tp, Kinematic<Frenet>& start, Kinematic<Frenet>& end, dou
     secs += secs_per_update_;
     double s = QuinticPosition(secs, s_coeffs); 
     double d = QuinticPosition(secs, d_coeffs);
+    //d = d > 10.0 ? 10.0 : d;
+    //d = d < 2.0 ? 2.0 : d;
+    //d = std::min (d, 10.0);
+    //d = std::max (d, 2.0);
 
     // waypoints should automatically be normalized between [0, max_s_).
     // see class def of Frenet.
@@ -215,24 +218,25 @@ double Path::LastVelocityScore(Path &path) {
   return path.last_v_s_ / Path::max_last_v_s_;
 }
 
-
+//TODO: need sccore for being in lane
+//TODO: can't touch right side lane 2.0
 vector<Path::ScoreFunction> Path::score_functions_ = {
   {
     Path::DistanceScore, 
-    0.65
+    0.15   //15
   },
   {
     Path::LaneKeepingScore, 
-    0.15
+    0.10  //15
   },
   {
     Path::AverageVelocityScore, 
-    0.15
+    0.05  //10
   },
   {
     Path::LastVelocityScore,
-    0.05    
-  },
+    0.70  //60
+  }
 };
 
 bool Path::GreaterThan(Path& p1, Path& p2) {

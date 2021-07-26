@@ -54,14 +54,17 @@ void Prediction::SelectCarsNearby(const double car_x, const double car_y,
   Frenet car_f;
   map_.CalcFrenet(car_p, car_f);
   
-  double rear_buffer_dist = 15.0;
-  Frenet base = car_f - Frenet(rear_buffer_dist, 0);
-      
-  vector<double> car_distances(map_.num_lanes());
-  fill(car_distances.begin(), car_distances.end(), DBL_MAX);
+  vector<double> car_distances_ahead(map_.num_lanes());
+  fill(car_distances_ahead.begin(), car_distances_ahead.end(), DBL_MAX);
   
-  vector<int> closest_cars(map_.num_lanes());
-  fill(closest_cars.begin(), closest_cars.end(), -1);
+  vector<int> closest_cars_ahead(map_.num_lanes());
+  fill( closest_cars_ahead.begin(),  closest_cars_ahead.end(), -1);
+  
+  vector<double> car_distances_behind(map_.num_lanes());
+  fill(car_distances_behind.begin(), car_distances_behind.end(), -DBL_MAX);
+  
+  vector<int> closest_cars_behind(map_.num_lanes());
+  fill(closest_cars_behind.begin(), closest_cars_behind.end(), -1);
   
   //cout << "SelectCarsNearby sensor_fusion size " << sensor_fusion.size() << endl;
   for (int i = 0; i < sensor_fusion.size(); i ++) {
@@ -72,21 +75,38 @@ void Prediction::SelectCarsNearby(const double car_x, const double car_y,
     map_.CalcFrenet(other_car_p, other_car_f);
     int other_car_lane = map_.D2Lane(other_car_f.d());
     
+    //TODO: create two cars for car in transition
+    
     if ((0 <= other_car_lane) and (other_car_lane < map_.num_lanes())) {
-      double s_dist = other_car_f.s() - base.s();
-      if ((0 < s_dist) and (s_dist < near_distance_) 
-            and (s_dist < car_distances[other_car_lane])) {
-        car_distances[other_car_lane] = s_dist;
-        closest_cars[other_car_lane] = i;
+      
+      double s_dist = other_car_f.s() - car_f.s();
+      
+      if ((0 <= s_dist) and (s_dist <= near_distance_) 
+            and (s_dist < car_distances_ahead[other_car_lane])) {
+              
+        car_distances_ahead[other_car_lane] = s_dist;
+        closest_cars_ahead[other_car_lane] = i;
+        
+      } else if ((0 > s_dist) and (s_dist >= -near_distance_) 
+            and (s_dist > car_distances_behind[other_car_lane])) {
+              
+        car_distances_behind[other_car_lane] = s_dist;
+        closest_cars_behind[other_car_lane] = i;
+        
       }
     }
   }
   
   cars_nearby.clear();
-  for (int i = 0; i < closest_cars.size(); i ++) {
-    int car_idx = closest_cars[i];
+  for (int i = 0; i < closest_cars_ahead.size(); i ++) {
+    int car_idx = closest_cars_ahead[i];
     if (car_idx >= 0) 
       cars_nearby.push_back(sensor_fusion[car_idx]);
+  }
+  for (int i = 0; i < closest_cars_behind.size(); i ++) {
+  int car_idx = closest_cars_behind[i];
+  if (car_idx >= 0) 
+    cars_nearby.push_back(sensor_fusion[car_idx]);
   }
   
   return;

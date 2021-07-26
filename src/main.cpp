@@ -67,11 +67,11 @@ int main() {
   
   // path_planning parameters
   double secs_per_update = 0.02;
-  double plan_secs       = 3.0;  // planning horizon.
+  double plan_secs       = 2.0;  // planning horizon.
   double exe_secs        = 0.2;  // execution horizon.
   double prediction_secs = 1.0;  // prediction_secs
-  double max_v           = 21.905; //22.128; // in meters/sec. about 49.5 mph
-  double near_distance   = 45;
+  double max_v           = 22.128; //21.905; //22.128; // in meters/sec. about 49.5 mph
+  double near_distance   = 30;
   int    num_lanes       = 3;
   
   // TODO: change max_secs to plan_secs for all classes.
