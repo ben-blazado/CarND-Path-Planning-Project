@@ -81,81 +81,31 @@ bool Behavior::Valid(Kinematic<Frenet>& goal,
     
     //double max_decel = min (curr_speed/t_plan, 7.5);
     //double relative_speed = curr_speed - other_car_speed;
-    double max_decel = 10.0;
+    double max_decel = 8.5;  //10
     double breaking_distance = curr_speed*curr_speed / (2*max_decel);
     //double breaking_distance = curr_speed*t_plan - 0.5*max_decel*t_plan*t_plan;
-    double safe_distance = breaking_distance * 1.75;
+    double safe_distance = breaking_distance + 5;  //+10
+    double safe_curr_pos = other_car_pos - safe_distance;
+    double safe_goal_pos = other_car_pos + other_car_speed*t_plan - safe_distance;
     
-    // car in left lane in front going slower or in back going faster
-    if ((goal_lane <= other_car_lane) and (other_car_lane < curr_lane)     
-//    if ((goal_lane != curr_lane)
-//        and (other_car_lane == goal_lane)
-        and ((other_car_pos > curr_pos) and (other_car_speed < curr_speed)
-             or (other_car_pos < curr_pos) and (other_car_speed > curr_speed))) {
+    
+    //-----------------------------------------
+    // rules for changing lanes based on goal speed and current speed
+    //-----------------------------------------
+    
+    if ((goal_lane != curr_lane) and (goal_speed > curr_speed)) {
       valid = false;
       break;
     }
     
-    // car in left lane in front going slower or in back going faster than goal
-    if ((goal_lane <= other_car_lane) and (other_car_lane < curr_lane)     
-//    if ((goal_lane != curr_lane)
-//        and (other_car_lane == goal_lane)
-        and ((other_car_pos > curr_pos) and (other_car_speed < goal_speed)
-             or (other_car_pos < curr_pos) and (other_car_speed > goal_speed))) {
-      valid = false;
-      break;
-    }
+    //-----------------------------------------
+    // rules for changing lanes based on current position of other cars
+    //-----------------------------------------
     
-    // car in right lane in front going slower or in back going faster
-    if ((curr_lane < other_car_lane) and (other_car_lane <= goal_lane)
-//    if ((goal_lane != curr_lane)
-//        and (other_car_lane == goal_lane)
-        and ((other_car_pos > curr_pos) and (other_car_speed < curr_speed)
-             or (other_car_pos < curr_pos) and (other_car_speed > curr_speed))) {
-      valid = false;
-      break;
-    }
-    
-    // car in right lane in front going slower or in back going faster than goal
-    if ((curr_lane < other_car_lane) and (other_car_lane <= goal_lane)
-//    if ((goal_lane != curr_lane)
-//        and (other_car_lane == goal_lane)
-        and ((other_car_pos > curr_pos) and (other_car_speed < goal_speed)
-             or (other_car_pos < curr_pos) and (other_car_speed > goal_speed))) {
-      valid = false;
-      break;
-    }
-    
-
-    /*
-    // goal speed in other lane is faster than car speed
-    // we only change lanes at same speed or slower
-    if ((goal_lane != curr_lane)
-        and (goal_speed > other_car_speed)
-        and (other_car_lane == goal_lane)
-        and (other_car_pos > curr_pos)) {
-      valid = false;
-      break;
-    }
-    */
-    
-    // car in front too close for lane change
-    //if ((goal_lane != curr_lane) and (other_car_lane == curr_lane) and (other_car_pos > curr_pos)) {
-    //  double s_dist = other_car_pos - curr_pos;
-    //  double s_future_dist = (other_car_pos + other_car_speed*t_plan) - (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan);
-    // if ((0 <= s_dist) and (s_dist <= 7.5) or (s_future_dist <= 7.5)) { //TODO: set as constant offsets
-        //valid = false;
-        //break;
-    //  }
-    //}
-
     // car on left preventing lane change to left
     if ((goal_lane <= other_car_lane) and (other_car_lane < curr_lane)) {
       double s_dist = other_car_pos - curr_pos;
-      double s_future_dist = (other_car_pos + other_car_speed*t_plan) - goal_pos;
-      //if ((-10.0 <= s_dist) and (s_dist <= 10.0)) {
-          //or (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan > (other_car_pos + other_car_speed*t_plan) - safe_distance)) {
-      if (((-12 <= s_dist) and (s_dist <= 12)) or ((-12 <= s_future_dist) and (s_future_dist <= 12))) { //TODO: set as constant offsets
+      if ((-12 <= s_dist) and (s_dist <= 12)) { //TODO: set as constant offsets
         valid = false;
         break;
       }
@@ -165,101 +115,111 @@ bool Behavior::Valid(Kinematic<Frenet>& goal,
     if ((curr_lane < other_car_lane) and (other_car_lane <= goal_lane)) {
       double s_dist = other_car_pos - curr_pos;
       double s_future_dist = (other_car_pos + other_car_speed*t_plan) - goal_pos;
-      // ((-12.0 <= s_dist) and (s_dist <= 12.0)) {
-          // or (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan > (other_car_pos + other_car_speed*t_plan) - safe_distance)) {
-      if (((-12 <= s_dist) and (s_dist <= 12)) or ((-12 <= s_future_dist) and (s_future_dist <= 12))) { //TODO: set as constant offsets
+      if ((-12 <= s_dist) and (s_dist <= 12)) { //TODO: set as constant offsets
         valid = false;
         break;
       }
     }
+    
+    
+    //-----------------------------------------
+    // rules for changing lanes based on current speeds of other cars
+    //-----------------------------------------
+    
+    // car in left lane in front going slower or in back going faster than current speed
+    if ((goal_lane <= other_car_lane) and (other_car_lane < curr_lane)     
+        and ((other_car_pos > curr_pos) and (other_car_speed < curr_speed)
+             or (other_car_pos < curr_pos) and (other_car_speed > curr_speed))) {
+      valid = false;
+      break;
+    }
 
-    if ((goal_lane == other_car_lane) and (other_car_lane == curr_lane) // other car in goal lane
+    // car in right lane in front going slower or in back going faster than current speed    
+    if ((curr_lane < other_car_lane) and (other_car_lane <= goal_lane)
+        and ((other_car_pos > curr_pos) and (other_car_speed < goal_speed)
+             or (other_car_pos < curr_pos) and (other_car_speed > goal_speed))) {
+      valid = false;
+      break;
+    }
+    
+    
+    //-----------------------------------------
+    // rules for changing lanes based on goal position and goal speed (future)
+    //-----------------------------------------
+
+    // car in right lane in front going slower or in back going faster than goal or goal in safe zone
+    if ((goal_lane <= other_car_lane) and (other_car_lane < curr_lane)     
+        and (((other_car_pos > curr_pos) and ((other_car_speed < goal_speed) or (goal_pos > safe_goal_pos))) // other car in front
+             or ((other_car_pos < curr_pos) and (other_car_speed > goal_speed)))) {
+      valid = false;
+      break;
+    }
+    
+    // car in right lane in front going slower or in back going faster or goal in safe zone
+    if ((curr_lane < other_car_lane) and (other_car_lane <= goal_lane)
+        and (((other_car_pos > curr_pos) and ((other_car_speed < goal_speed) or (goal_pos > safe_goal_pos))) // other car in front
+             or ((other_car_pos < curr_pos) and (other_car_speed > goal_speed)))) {
+      valid = false;
+      break;
+    }
+    
+    
+    
+    //TODO: collision still occurs with front car in safe zone can't change lanes, speed was high 48
+
+    //TODO: slow start. sometimes. Need to kill thread?
+    //TODO: Kill threads on error
+    //TODO: reduce distance to allow for tight lane change (reduce rear distance?) goal - 8, reduce safe zone toleranace on lane change?
+    //TODO: unreasonable suprios 2 lane change left and slow down at mile 2.33?, no traffic, lane ahead free is car behind causing lane change?
+    //TODO: front car collision, left lane, after loop is complete. s-value too high?
+    //TODO: no changing lanes when clear and after one loop is completet? s-value to high?
+    //TODO: car takes too long to change lanes when behind another car and destination lane has traffic. lower safe distance?
+    //TODO: side collision rule: clone oher car
+    //TODO: rule with car yaw to prevent over speed?
+    //TODO: collision change lane left accelerating?
+    //TODO: emergency break even though car is behind
+    //TODO: cant change lanes faster than current speed
+    //TODO: can't change lane into safe zone of car in other lane
+    //TODO: create function for best min safe speed
+    //TODO: fix no paths selected.
+    
+    //Done: getting max jerks when lane following or when lanes are clear
+            // - check spline dx=dy? for frenet2cart
+    //DONE: car stops at end of loop... DONE
+    //DONE: vefiry distance when one loop over and other target is behind or vice versa
+    
+
+    //-----------------------------------------
+    // rules for when car is approaching or in safe zone
+    //-----------------------------------------
+
+    if ((goal_lane == other_car_lane) and (other_car_lane == curr_lane) // other car lane = goal lane = curr lane
         and (curr_pos < other_car_pos) // other car in front
-        and (goal_speed > 0.4*other_car_speed)
+        and (curr_pos > safe_curr_pos) // outside safe zone
+        //and (goal_speed > curr_speed)) {
+        and (goal_speed > ((other_car_pos - curr_pos) / safe_distance) * other_car_speed)) {
+        //and (goal_speed > 0.45*other_car_speed)) {
         //and (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan > (other_car_pos + other_car_speed*t_plan) - safe_distance)) { // faster than other car
-        and (goal_pos > (other_car_pos + other_car_speed*t_plan) - safe_distance)) { // faster than other car
-      if (goal_lane != curr_lane) {
-        //valid = false;
-        //break;
-      }
-      cout << "car ahead " << other_car_pos - curr_pos << " " << curr_speed << endl;
+      cout << "inside safe zone " << other_car_pos - curr_pos << " " << curr_speed << " other car speed " << other_car_speed << endl;
       //cout << "car ahead " << other_car_pos - curr_pos << " " << goal_acc << endl;
       valid = false;
       break;
-      
-      /*
-      cout << "car ahead " << other_car_pos - curr_pos << endl;
-      double target_a = (curr_speed - other_car_speed) / t_plan;
-      double target_v;
-      if (target_a < max_decel)
-        target_v = other_car_speed;
-      else
-        target_v = curr_speed - max_decel*t_plan;
-      goal.v = {target_v, goal.v.d()};
-      //double new_goal_speed = std::max (curr_speed - 7.5*t_plan, other_car_speed);
-      //goal.v = {new_goal_speed, goal.v.d()};
-      goal.a = {0, 0};
-      //double new_goal_pos = other_car_pos + other_car_speed*t_plan - safe_distance;
-      //double new_goal_pos = curr_pos + curr_speed*t_plan - 0.5*max_decel*t_plan*t_plan;
-      double new_goal_pos = curr_pos + curr_speed * t_plan - 0.5*(curr_speed - other_car_speed)*t_plan*t_plan;
-      //goal_pos = other_car_next_pos - min(other_car_next_pos - curr_pos, 15.0);
-      goal.p = {new_goal_pos, goal.p.d()}; //TODO: set const 15 offset
-      // cout << "curr speed " << curr_speed << " other car " << car.v.s() << endl;
-      // (15 - 0.5*goal.a.s()*dt*dt) / dt = target_v;             
-      */
     }
     
-    /*
-    //TODO: select closest car in lane
-    if ((goal_lane == car_lane) // same lane
-        //and (curr_lane == car_lane) // same lane
-        and ((curr_speed > car.v.s()) or (goal.v.s() > car.v.s()) or (p.s() - loc_in.start.p.s() < 25.0))) {           // goal is faster than car
-      double dt = 3;
-      double target_v;
-      double a;
-      if ((p.s() - loc_in.start.p.s() < 25.0)  and (curr_speed > target_v) and false) {
-          target_v = curr_speed - 3.0;
-          a = (target_v - curr_speed) / dt;
-      }
-      else {
-          target_v = car.v.s();
-          a = (target_v - curr_speed) / dt;
-      }
-      goal.v = {target_v, goal.v.d()};
-      goal.a = {0, goal.a.d()};
-      double ds = curr_speed*dt + 0.5*a*dt*dt;
-      
-      if (ds < 0)
-        cout << "*** DS is less than ZERo!!! ***" << endl;
-      goal.p = {loc_in.start.p.s() + ds, goal.p.d()};
-      // cout << "curr speed " << curr_speed << " other car " << car.v.s() << endl;
-      break;
-      
-      // (15 - 0.5*goal.a.s()*dt*dt) / dt = target_v;             
-    }
-    */
 
-    /*
-    //TODO: select closest car in lane
-    if ((goal_lane != curr_lane) // same lane
-        and (goal_lane == car_lane) // same lane
-        and (goal.v.s() > car.v.s())) {           // goal is faster than car
-      double dt = 3;
-      goal.v = {car.v.s(), goal.v.d()};
-      goal.a = {0, goal.a.d()};
-      double ds = car.v.s()*dt + 0.5*goal.a.s()*dt*dt;       
-      goal.p = {loc_in.start.p.s() + ds, goal.p.d()};
-      cout << "collision imminent " << curr_speed << " " << car.v.s() << endl;
+    if ((goal_lane == other_car_lane) and (other_car_lane == curr_lane) // other car in goal lane
+        and (curr_pos < other_car_pos) // other car in front
+        //and (goal_speed > curr_speed)
+        and (goal_speed > ((other_car_pos - curr_pos) / safe_distance) * other_car_speed)
+        //and (goal_speed > 0.70*other_car_speed)
+        //and (curr_pos + curr_speed*t_plan + 0.5*curr_acc*t_plan*t_plan > (other_car_pos + other_car_speed*t_plan) - safe_distance)) { // faster than other car
+        //and (goal_pos > (other_car_pos + other_car_speed*t_plan) - safe_distance)) { // faster than other car
+        and (goal_pos > safe_goal_pos)) {
+      cout << "approaching safe zone " << other_car_pos - curr_pos << " " << curr_speed << " other car speed " << other_car_speed << endl;
+      //cout << "car ahead " << other_car_pos - curr_pos << " " << goal_acc << endl;
+      valid = false;
       break;
     }
-    */
-
-    //if ((p.s() > loc_in.start.p.s())              // other car in front
-    //    and (goal_pos > p.s() + 3*car.v.s() - 10)
-    //    and (goal_lane == map_.D2Lane(car.p.d()))) { // same lane
-    //  valid = false;
-    //  break;
-    //}
     
   }
       
@@ -282,6 +242,11 @@ void Behavior::GeneratePaths(LocalizationInput loc_in,
   for (double a = -10; a <= 5; a += (a < 0 ? 0.5 : 0.125)) {
   //for (double end_v_s = max(0.0, v_s - 7.5*t); end_v_s <= min (v_s + 7.5*t, 22.128); end_v_s += 2.2128) {
     // acceleration, a, multiplied by time, t.
+    
+    // this cap is needed. may prevent a no paths selected reduction of speed or jerk
+    if ((v_s >= 20.9196) and (a > 0))
+      continue;
+    
     double at = a*t;
 
     double end_v_s = v_s + at;

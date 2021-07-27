@@ -121,10 +121,6 @@ Path::Path (time_point tp, Kinematic<Frenet>& start, Kinematic<Frenet>& end, dou
     secs += secs_per_update_;
     double s = QuinticPosition(secs, s_coeffs); 
     double d = QuinticPosition(secs, d_coeffs);
-    //d = d > 10.0 ? 10.0 : d;
-    //d = d < 2.0 ? 2.0 : d;
-    //d = std::min (d, 10.0);
-    //d = std::max (d, 2.0);
 
     // waypoints should automatically be normalized between [0, max_s_).
     // see class def of Frenet.
@@ -223,11 +219,11 @@ double Path::LastVelocityScore(Path &path) {
 vector<Path::ScoreFunction> Path::score_functions_ = {
   {
     Path::DistanceScore, 
-    0.15   //15
+    0.10   //15
   },
   {
     Path::LaneKeepingScore, 
-    0.10  //15
+    0.05 //10  //15
   },
   {
     Path::AverageVelocityScore, 
@@ -235,7 +231,7 @@ vector<Path::ScoreFunction> Path::score_functions_ = {
   },
   {
     Path::LastVelocityScore,
-    0.70  //60
+    0.80 //70 //60
   }
 };
 

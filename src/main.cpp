@@ -71,7 +71,7 @@ int main() {
   double exe_secs        = 0.2;  // execution horizon.
   double prediction_secs = 1.0;  // prediction_secs
   double max_v           = 22.128; //21.905; //22.128; // in meters/sec. about 49.5 mph
-  double near_distance   = 30;
+  double near_distance   = max_v*max_v/(2*8.5) * 2.0;//45;
   int    num_lanes       = 3;
   
   // TODO: change max_secs to plan_secs for all classes.

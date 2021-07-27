@@ -19,10 +19,7 @@ Frenet::Frenet() {
 
 Frenet::Frenet(double s, double d) {
 
-  if (s >=  max_s_)
-    s_ = fmod(s, max_s_);
-  else
-    s_ = s;
+  s_ = s;  
   d_ = d;
   
   return;
@@ -30,11 +27,7 @@ Frenet::Frenet(double s, double d) {
 
 Frenet Frenet::operator =(Frenet f) {
   
-  if (f.s_ >=  max_s_)
-    s_ = fmod(f.s_, max_s_);
-  else
-    s_ = f.s_;
-  
+  s_ = f.s_;
   d_ = f.d_;
   
   return *this;
@@ -44,9 +37,6 @@ Frenet Frenet::operator +(Frenet f) {
   Frenet sum;
   
   sum.s_ = s_ + f.s_;
-  if (sum.s_ >= max_s_)
-    sum.s_ = fmod (sum.s_, max_s_);
-  
   sum.d_ = d_ + f.d_;
   
   return sum;
@@ -77,19 +67,16 @@ Frenet Frenet::operator /(double divisor) {
   return q;
 }
 
+
+//TODO: check where this is used
 Frenet Frenet::operator *(double multiplier) {
   Frenet prod;
   
   prod.s_ = s_ * multiplier;
-  if (prod.s_ >= max_s_)
-    prod.s_ = fmod (prod.s_, max_s_);
-  
   prod.d_ = d_ * multiplier;
   
   return prod;
 }
-
-
 
 void Frenet::Max(Frenet f) {
   if (f.s_ > s_)
@@ -237,10 +224,13 @@ int Map::D2Lane (double d) const {
 
 double Map::Lane2D (int lane) const {
   
-  double d = 4.0*lane + 2.0;
-  if (lane == 2)
-    d = 9.8; //  9.75; good
+  double d;
   
+  switch (lane) {
+    case 0: d = 2.0; break;
+    case 1: d = 6.0; break;
+    case 2: d = 9.8; break;
+  }
   
   return d;
 }
@@ -312,13 +302,19 @@ int Map::GetStartPoint(Cartesian p) {
 void Map::CalcCartesian(const Frenet& f, Cartesian& p) {
   
   //TODO: check this condition.
-  if (f.s_ >= max_s_) {
-    cout << "*** f.s is greater than max_s. exiting... ***" << endl;
-    exit(1);
-  }
+  double s = f.s_ < max_s_ ? f.s_ : fmod (f.s_, max_s_);
   
-  p.x = sx_(f.s_) + f.d_*snx_(f.s_);
-  p.y = sy_(f.s_) + f.d_*sny_(f.s_);
+  //double s = fmod (f.s_, max_s_);
+  //if (f.s_ >= max_s_) {
+  // cout << "*** f.s is greater than max_s. exiting... ***" << endl;
+  //  exit(1);
+  //}
+
+  p.x = sx_(s) + f.d_*snx_(s);
+  p.y = sy_(s) + f.d_*sny_(s);
+  
+  //p.x = sx_(f.s_) + f.d_*snx_(f.s_);
+  //p.y = sy_(f.s_) + f.d_*sny_(f.s_);
   
   return;
 }
@@ -365,9 +361,9 @@ void Map::CalcFrenet(const Cartesian& p, Frenet& f) {
     
   }
   
-  f.s_ = s;
-  //f.s = (s > max_s_) ? Normalize(s) : s;
-  f.d_ = (dx - dy) / (snx - sny);   // check for zeros?
+  f.s_ = s < max_s_ ? s : fmod (s, max_s_);
+  f.d_ = (dx + dy) / (snx + sny);  
+    
   
   return;
 }
